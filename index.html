@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>停车大师 ParkMaster · 新手司机停车训练模拟器</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    window.__errs = [];
+    window.addEventListener('error', function (e) {
+      window.__errs.push(e.message + ' @ ' + String(e.filename || '').split('/').pop() + ':' + e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      window.__errs.push('promise: ' + String(e.reason));
+    });
+  </script>
+  <script src="vendor/three.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/collision.js"></script>
+  <script src="js/scoring.js"></script>
+  <script src="js/pulse.js"></script>
+  <script src="js/demo_paths.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/autopilot.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/carModel.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/cockpit.js"></script>
+  <script src="js/assist.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
