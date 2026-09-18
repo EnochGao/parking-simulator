@@ -104,7 +104,7 @@
       b2.onclick = onSelect;
       box.appendChild(b1); box.appendChild(b2);
       box.appendChild(el('p', 'menu-help',
-        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向 · Q/E 转向灯<br>Z/X 按住看左右后视镜 · H 引导线 · M 俯视图 · C 倒车影像 · Esc 暂停'));
+        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向（松开保持角度） · Q/E 转向灯<br>Z/X 按住看左右后视镜 · V 调后视镜角度 · H 引导线 · M 俯视图 · C 倒车影像 · Esc 暂停'));
       api.showScreen(box);
     };
 

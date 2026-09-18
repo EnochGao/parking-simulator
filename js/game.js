@@ -53,6 +53,9 @@
     this.keys = {};
     this.input = { steer: 0, drive: 0, handbrake: false };
     this.assist = { guide: true, top: false, revCam: true };
+    this.mirrorMode = false;  // 后视镜调节模式（V 进入/退出，驾驶输入封锁）
+    this.mirrorSel = 0;       // 选中的镜子：0 左外 1 右外 2 车内
+    this.mirrorAdj = [{ y: 0, p: 0 }, { y: 0, p: 0 }, { y: 0, p: 0 }]; // 调节量（跨关卡保留）
     this.indicator = { side: 0, timer: 0 }; // 0 无 1 左 2 右
     this.stopTimer = 0;
     this.time = 0;
@@ -100,7 +103,13 @@
         case 'KeyZ': self.lookHeld = 1; break;  // 按住转头看左后视镜
         case 'KeyX': self.lookHeld = 2; break;  // 按住转头看右后视镜
         case 'Space': self.input.handbrake = true; e.preventDefault(); break;
-        case 'Escape': self.pause(); break;
+        case 'KeyV': self.mirrorMode = !self.mirrorMode; break; // 后视镜调节模式
+        case 'Digit1': case 'Numpad1': if (self.mirrorMode) self.mirrorSel = 0; break;
+        case 'Digit2': case 'Numpad2': if (self.mirrorMode) self.mirrorSel = 1; break;
+        case 'Digit3': case 'Numpad3': if (self.mirrorMode) self.mirrorSel = 2; break;
+        case 'Escape':
+          if (self.mirrorMode) { self.mirrorMode = false; break; } // 调节模式下先退模式再暂停
+          self.pause(); break;
       }
     });
     document.addEventListener('keyup', function (e) {
@@ -138,6 +147,12 @@
     // 倒车影像屏挂在中控台（车内居中 x=0），随头转动保持真实车内位置；
     // 作为 interior 子对象，镜面/倒车渲染隐藏内饰时自动一同隐藏
     this.cockpit.interior.add(this.mirrorH.revPlane);
+    // 恢复此前保留的后视镜调节量（换关卡不重置）
+    for (var mi = 0; mi < this.mirrorH.mirrors.length; mi++) {
+      this.mirrorH.mirrors[mi].adjYaw = this.mirrorAdj[mi].y;
+      this.mirrorH.mirrors[mi].adjPitch = this.mirrorAdj[mi].p;
+      this.mirrorH.mirrors[mi].apply();
+    }
     this.car.group.add(this.camera);
     this.camera.position.set(this.cfg.CAR.seatX, this.cfg.CAR.seatY, this.cfg.CAR.seatZ);
     this.camera.rotation.set(0, 0, 0);
@@ -249,8 +264,23 @@
     }
     if (!this.autopilotActive) {
       var k = this.keys;
-      this.input.steer = (k.a ? 1 : 0) - (k.d ? 1 : 0);
-      this.input.drive = (k.w ? 1 : 0) - (k.s ? 1 : 0); // W 前进 / S 倒车 / 松开即刹车
+      if (this.mirrorMode) {
+        // 后视镜调节模式：驾驶输入封锁（松开即刹车停稳），方向键改为调节选中镜面
+        this.input.steer = 0; this.input.drive = 0; this.input.handbrake = false; this.input.holdSteer = true;
+        var dy = (k.a ? 1 : 0) - (k.d ? 1 : 0);
+        var dp = (k.w ? 1 : 0) - (k.s ? 1 : 0);
+        var mir = this.mirrorH && this.mirrorH.mirrors[this.mirrorSel];
+        if (mir && (dy || dp)) {
+          mir.adjYaw = PS.Physics.clamp(mir.adjYaw + dy * 0.7 * DT, -0.35, 0.35);   // ±20°
+          mir.adjPitch = PS.Physics.clamp(mir.adjPitch + dp * 0.5 * DT, -0.26, 0.26); // ±15°
+          mir.apply();
+          this.mirrorAdj[this.mirrorSel] = { y: mir.adjYaw, p: mir.adjPitch };
+        }
+      } else {
+        this.input.steer = (k.a ? 1 : 0) - (k.d ? 1 : 0);
+        this.input.drive = (k.w ? 1 : 0) - (k.s ? 1 : 0); // W 前进 / S 倒车 / 松开即刹车
+        this.input.holdSteer = !k.a && !k.d;              // 松开方向键保持转角，不自动回正
+      }
     }
     var r = this.carP.update(DT, this.input);
     this.time += DT;
@@ -325,8 +355,10 @@
     this.hud.update({
       time: this.time, collisions: this.collisions, gear: this.carP.gear, speed: this.carP.speed,
       radar: this.radar,
-      hint: !ev.completed && ev.posOffset < 3 && ev.inside ? '很好！停稳保持…' :
-            (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右') : ''),
+      hint: this.mirrorMode ?
+        '后视镜调节 [' + (this.mirrorSel === 0 ? '左外镜' : this.mirrorSel === 1 ? '右外镜' : '车内镜') + '] · A/D 左右 · W/S 上下 · 1/2/3 切换 · V 完成' :
+        (!ev.completed && ev.posOffset < 3 && ev.inside ? '很好！停稳保持…' :
+        (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右') : '')),
       assistText: (this.assist.guide ? '引导✓' : '') + (this.assist.top ? ' 俯视✓' : '') + (this.assist.revCam ? ' 倒影✓' : '')
     });
   };
@@ -344,6 +376,10 @@
     }
     /* 刹车灯：手刹 / 松开按键滑行刹车中 / 前进中按 S 减速 */
     var spd = this.carP ? this.carP.speed : 0;
+    /* 仪表盘实时刷新（转速/时速指针；数值不变不重绘） */
+    if (this.cockpit.updateGauges) {
+      this.cockpit.updateGauges(Math.abs(spd) * 3.6, this.carP.gear);
+    }
     var braking = this.input.handbrake ||
       (!this.keys.w && !this.keys.s && Math.abs(spd) > 0.05) ||
       (this.keys.s && spd > 0.05);
@@ -356,14 +392,15 @@
     this.car.indicators.l.material.color.setHex(this.indicator.side === 1 && on ? indColor : this.car.indOff);
     this.car.indicators.r.material.color.setHex(this.indicator.side === 2 && on ? indColor : this.car.indOff);
 
-    /* 相机（含按住 Z/X 时向左/右转头的缓动） */
-    var lookTarget = this.lookHeld === 1 ? 0.60 : (this.lookHeld === 2 ? -0.86 : 0);
+    /* 相机（含按住 Z/X 时向左/右转头的缓动；目标角对准两侧外后视镜） */
+    var lookTarget = this.lookHeld === 1 ? 0.76 : (this.lookHeld === 2 ? -1.11 : 0);
     if (this.lookYaw !== lookTarget) {
       this.lookYaw += (lookTarget - this.lookYaw) * Math.min(1, elapsed * 9);
       if (Math.abs(this.lookYaw - lookTarget) < 0.005) this.lookYaw = lookTarget;
     }
     this.camera.rotation.y = Math.PI + this.lookYaw;
-    this.camera.rotation.x = this.lookPitch;
+    // rotation.y=π 时欧拉 XYZ 下 x 分量方向相反：+7° 即视线向下俯（真实驾驶视线，仪表台入画）
+    this.camera.rotation.x = this.lookPitch + 7 * D2R;
     /* 太阳灯跟随 */
     this.sun.position.set(this.carP.x + 18, 30, this.carP.z + 12);
     this.sun.target.position.set(this.carP.x, 0, this.carP.z);

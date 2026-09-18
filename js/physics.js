@@ -41,8 +41,9 @@
   };
 
   /**
-   * 输入 input: {drive:-1|0|1(1=W 前进, -1=S 倒车), steer:-1..1(左正右负), handbrake:bool}
-   * 兼容旧字段：throttle>0 视为前进，reverse 视为倒车。
+   * 输入 input: {drive:-1|0|1(1=W 前进, -1=S 倒车), steer:-1..1(左正右负), handbrake:bool,
+   *              holdSteer:bool(true=松开方向键时保持当前转角，不自动回正)}
+   * 兼容旧字段：throttle>0 视为前进，reverse 视为倒车；不传 holdSteer 保持旧的自动回正行为。
    * 松开前后键（drive=0）＝刹车，平顺制动至完全停稳。
    * dt 固定步长
    */
@@ -51,7 +52,9 @@
     input = input || {};
 
     // --- 转向（静止时仅转轮不动车） ---
-    var target = clamp(input.steer || 0, -1, 1) * this.car.maxSteer;
+    // holdSteer=true 时目标角为当前角：转角保持不动（真实驾驶习惯，反打方向即可回正）
+    var holdSteer = input.holdSteer === true;
+    var target = holdSteer ? this.steer : clamp(input.steer || 0, -1, 1) * this.car.maxSteer;
     var rate = (Math.abs(target) < Math.abs(this.steer) && Math.sign(target) === Math.sign(this.steer)) ||
                target === 0 ? P.centerRate : P.steerRate;
     if (this.steer < target) this.steer = Math.min(target, this.steer + rate * dt);

@@ -40,6 +40,8 @@
       stopTime: 1.5,        // 停稳判定时长
       maxCollisions: 5      // 强制失败碰撞数
     },
-    VIEW: { fov: 72, mirrorFov: 58, revFov: 80, near: 0.12, far: 220 } // fov: 垂直视场角，72° 接近真实车内透视（85° 鱼眼感过强）；revFov: 倒影广角
+    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 46, revFov: 80, near: 0.12, far: 220 }
+    // fov: 主相机垂直视场角（72° 接近真实车内透视）；mirrorFov/inMirrorFov: 外/内后视镜相机视场，
+    // 按 GB 15084（ECE R46）Ⅲ/Ⅰ类视野要求标定并适度放宽以保证可玩性；revFov: 倒影广角
   };
 });

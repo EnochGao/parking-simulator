@@ -43,6 +43,16 @@ section('物理模型');
   check('静止打轮：前轮已转到位', approx(c.steer, CFG.CAR.maxSteer, 1e-4));
   check('无输入：静止时不自行蠕动', c.speed === 0, 'v=' + c.speed.toFixed(3));
 
+  // 松开方向保持角度（holdSteer：不自动回正；反打方向回正）
+  c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
+  for (i = 0; i < 30; i++) c.update(1 / 60, { steer: 1 });
+  var ang0 = c.steer;
+  check('松开保持：打轮中角度渐增', ang0 > 0.2 && ang0 < CFG.CAR.maxSteer, 'a=' + ang0.toFixed(3));
+  for (i = 0; i < 120; i++) c.update(1 / 60, { steer: 0, holdSteer: true });
+  check('松开保持：转角不自动回正', approx(c.steer, ang0, 1e-9));
+  for (i = 0; i < 150; i++) c.update(1 / 60, { steer: -1 });
+  check('松开保持：反打方向可回正并反向', c.steer < 0, 'a=' + c.steer.toFixed(3));
+
   // 倒车（S = drive -1，档位自动切 R）
   c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
   for (i = 0; i < 120; i++) c.update(1 / 60, { drive: -1, steer: 0.5 });
@@ -95,7 +105,7 @@ section('物理模型');
   var v0 = c.speed;
   c.bounce();
   check('碰撞反弹反向衰减', c.speed < 0 && Math.abs(c.speed) < v0);
-});
+})();
 
 /* ---------------- 2. 碰撞单元测试 ---------------- */
 section('碰撞检测');
@@ -130,7 +140,7 @@ section('碰撞检测');
   check('标准车位完美入库', COL.carInsidePoly(0, 0, 0, CFG.CAR, spotPoly));
   check('偏出车位判定', !COL.carInsidePoly(0.5, 0, 0, CFG.CAR, spotPoly));
   check('横在车位外判定', !COL.carInsidePoly(4, 0, 0, CFG.CAR, spotPoly));
-});
+})();
 
 /* ---------------- 3. 评分单元测试 ---------------- */
 section('评分系统');
@@ -147,7 +157,8 @@ section('评分系统');
   check('完美停车-三星', ev.stars === 3);
   check('完美停车-满分含时间奖励', ev.score >= 100, 'score=' + ev.score);
 
-  ev = SCO.evaluate({ x: 0.4, z: 0.3, heading: 6 * Math.PI / 180, spot: spot, collisions: 2, time: 70, par: 60, carCfg: CFG.CAR, cfg: SC });
+  // 场景需真实可完成：0.1m/0.2m 偏差 + 6° 时四角仍在车位内（0.4m 横偏时车角已探出）
+  ev = SCO.evaluate({ x: 0.1, z: 0.2, heading: 6 * Math.PI / 180, spot: spot, collisions: 2, time: 70, par: 60, carCfg: CFG.CAR, cfg: SC });
   check('偏差+碰撞-仍完成', ev.completed);
   check('偏差+碰撞-两星', ev.stars === 2, 'stars=' + ev.stars);
   check('碰撞扣分生效', ev.colPenalty === 15, 'pen=' + ev.colPenalty);
@@ -162,7 +173,7 @@ section('评分系统');
   ev = SCO.evaluate({ x: 0.1, z: 0.1, heading: 0, spot: spot, collisions: 0, time: 59, par: 60, carCfg: CFG.CAR, cfg: SC });
   check('分数上限 110', ev.score <= 110, 'score=' + ev.score);
   check('小幅偏差仍三星', ev.stars === 3, 'score=' + ev.score + ' stars=' + ev.stars);
-});
+})();
 
 /* ---------------- 4. 关卡数据完整性校验 ---------------- */
 section('关卡数据校验');

@@ -1,4 +1,4 @@
-/* 第一人称驾驶舱：内饰、方向盘、三后视镜（实时渲染到纹理，镜像翻转）、倒车影像 */
+/* 第一人称驾驶舱：内饰、方向盘、三后视镜（实时渲染到纹理，镜像翻转）、倒车影像中控屏 */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }
@@ -10,7 +10,7 @@
 
   /** 构建舱内结构（作为玩家车 group 的子对象）。
    *  布局以驾驶员眼位 (seatX,seatY,seatZ)=(0.36,1.16,0.05) 为基准：
-   *  方向盘位于驾驶员正前方偏下、完整可见；仪表台整体退到方向盘后方，避免穿模。 */
+   *  方向盘位于驾驶员正前方偏下、完整可见；仪表台延伸至膝部，两侧门板封住车底视野。 */
   function buildInterior(carGroup) {
     var interior = new THREE.Group();
     var dm = dark(), dm2 = dark(0x32353c);
@@ -112,54 +112,62 @@
   }
 
   /**
-   * 后视镜组：左右外后视镜 + 车内后视镜 + 倒车影像相机
+   * 后视镜组：左右外后视镜 + 车内后视镜 + 倒车影像中控屏
    * hideInMirror: 渲染镜面画面时需要隐藏的对象（内饰组/舱玻璃），保留外观使镜中可见车身
-   * 返回 { updateCar(), render(renderer, scene), mirrors:[{mesh,cam}], revCam, revPlane }
+   * 返回 { render(renderer, scene), mirrors:[{grp,plane,cam,adjYaw,adjPitch,apply()}], revCam, revPlane, revRt }
    */
   function buildMirrors(carGroup, renderer, hideInMirror) {
     hideInMirror = hideInMirror || [];
-    var VIEW = PS.VIEW || { mirrorFov: 58, revFov: 115 };
+    var VIEW = PS.VIEW || {};
+    var EXT_FOV = VIEW.mirrorFov || 58;      // 外后视镜相机视场
+    var INT_FOV = VIEW.inMirrorFov || VIEW.mirrorFov || 58; // 车内后视镜相机视场
     var mirrors = [];
 
-    /** pos: 镜面位置；camPos: 镜相机位置；yaw: 镜面朝向；camYaw: 镜相机朝向；size: [宽,高] */
-    function makeMirror(pos, camPos, yawDeg, camYawDeg, size, withShell) {
+    /** pos: 镜面位置；camPos: 镜相机位置；yaw: 镜面朝向；camYaw: 镜相机朝向；size: [宽,高]
+     *  镜面与外壳同组，adjYaw/adjPitch 为驾驶员调节量（V 调节模式）：
+     *  玻璃组与镜相机一起偏转 —— 相机偏转即改变镜中所见，与真实调后视镜一致。 */
+    function makeMirror(pos, camPos, yawDeg, camYawDeg, size, withShell, fov) {
       var rt = new THREE.WebGLRenderTarget(384, 216);
-      var cam = new THREE.PerspectiveCamera(VIEW.mirrorFov || 58, 384 / 216, 0.3, 160);
+      var cam = new THREE.PerspectiveCamera(fov, 384 / 216, 0.3, 160);
       cam.position.set(camPos.x, camPos.y, camPos.z);
-      cam.rotation.y = camYawDeg * D2R;
-      cam.rotation.x = -4 * D2R;
+      cam.rotation.set(-4 * D2R, camYawDeg * D2R, 0);
       carGroup.add(cam);
       // 镜面：法线朝向驾驶员；用 scale.x = -1 实现真实镜像翻转；DoubleSide 保证可见
+      var grp = new THREE.Group();
+      grp.position.set(pos.x, pos.y, pos.z);
+      grp.rotation.y = yawDeg * D2R;
       var mat = new THREE.MeshBasicMaterial({ map: rt.texture, side: THREE.DoubleSide });
       var plane = new THREE.Mesh(new THREE.PlaneGeometry(size[0], size[1]), mat);
-      plane.position.set(pos.x, pos.y, pos.z);
-      plane.rotation.y = yawDeg * D2R;
       plane.scale.x = -1; // 几何级水平翻转 = 真实镜像
-      carGroup.add(plane);
-      // 外后视镜外壳：沿镜面背面法线方向偏移（不能用世界 z 偏移，
-      // 否则镜面大角度旋转后外壳会挡在镜面与驾驶员之间）
+      grp.add(plane);
+      // 外后视镜外壳：组内沿背面法线（局部 -z）偏移，随组旋转始终贴在玻璃背面
       if (withShell) {
-        var yawRad = yawDeg * D2R;
         var shell = new THREE.Mesh(new THREE.BoxGeometry(size[0] + 0.07, size[1] + 0.07, 0.05), dark(0x2c2f35));
-        shell.position.set(
-          pos.x - Math.sin(yawRad) * 0.05,
-          pos.y,
-          pos.z - Math.cos(yawRad) * 0.05
-        );
-        shell.rotation.y = yawRad;
-        carGroup.add(shell);
+        shell.position.set(0, 0, -0.05);
+        grp.add(shell);
       }
-      var m = { cam: cam, rt: rt, plane: plane, mat: mat };
+      carGroup.add(grp);
+      var m = {
+        cam: cam, rt: rt, plane: plane, mat: mat, grp: grp,
+        camYaw0: camYawDeg * D2R, camPitch0: -4 * D2R,
+        adjYaw: 0, adjPitch: 0,
+        apply: function () {
+          grp.rotation.y = yawDeg * D2R + m.adjYaw;
+          grp.rotation.x = m.adjPitch;
+          cam.rotation.y = m.camYaw0 + m.adjYaw;
+          cam.rotation.x = m.camPitch0 + m.adjPitch;
+        }
+      };
       mirrors.push(m);
       return m;
     }
 
     // 左外后视镜（驾驶员侧 +x）：镜面位于 A 柱前方视野内，相机置于车身外朝后偏外看
-    makeMirror({ x: 0.86, y: 1.06, z: 0.82 }, { x: 0.94, y: 1.05, z: 0.80 }, -147, -24, [0.30, 0.16], true);
+    makeMirror({ x: 0.86, y: 1.06, z: 0.82 }, { x: 0.94, y: 1.05, z: 0.80 }, -147, -24, [0.30, 0.16], true, EXT_FOV);
     // 右外后视镜（副驾侧 -x）：稍向内收以进入固定视野，配合转头键完整可见
-    makeMirror({ x: -0.55, y: 1.06, z: 0.85 }, { x: -0.63, y: 1.05, z: 0.83 }, 131, 24, [0.30, 0.16], true);
+    makeMirror({ x: -0.55, y: 1.06, z: 0.85 }, { x: -0.63, y: 1.05, z: 0.83 }, 131, 24, [0.30, 0.16], true, EXT_FOV);
     // 车内后视镜（正后方）
-    makeMirror({ x: 0.32, y: 1.27, z: 0.55 }, { x: 0.32, y: 1.27, z: 0.55 }, 180, 0, [0.30, 0.10], false);
+    makeMirror({ x: 0.32, y: 1.27, z: 0.55 }, { x: 0.32, y: 1.27, z: 0.55 }, 180, 0, [0.30, 0.10], false, INT_FOV);
 
     // 倒车影像相机（车尾摄像头）：朝车后方（-z）广角俯视地面
     var revCam = new THREE.PerspectiveCamera(VIEW.revFov, 16 / 9, 0.4, 60);
