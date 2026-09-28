@@ -83,12 +83,21 @@
         else this.speed -= Math.sign(this.speed) * dvb;
       } else {
         this.speed += drive * P.accel * dt;
+        // 极速限制（前进 / 倒车各有限速）
+        var maxAbs = drive > 0 ? P.maxFwd : P.maxRev;
+        // 倒车蠕行：轻点 S（按住时长不足 creepRampTime）时保持在蠕行速度，
+        // 持续按住才继续加速到倒车极速——为泊车提供低速精细控制
+        if (drive < 0) {
+          this._revHold = (this._revHold || 0) + dt;
+          if (this._revHold < P.creepRampTime) maxAbs = Math.min(maxAbs, P.creep / 3.6);
+        } else {
+          this._revHold = 0;
+        }
+        if (this.speed * drive > maxAbs) this.speed = maxAbs * drive;
       }
-      // 极速限制（前进 / 倒车各有限速）
-      var maxAbs = drive > 0 ? P.maxFwd : P.maxRev;
-      if (this.speed * drive > maxAbs) this.speed = maxAbs * drive;
     } else {
       // 无输入＝刹车：平顺制动至完全停稳
+      this._revHold = 0; // 松开倒车键后，下次轻点 S 重新从蠕行开始
       var dv1 = P.brake * dt;
       if (Math.abs(this.speed) <= dv1) this.speed = 0;
       else this.speed -= Math.sign(this.speed) * dv1;

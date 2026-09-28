@@ -100,22 +100,26 @@
       }
     });
 
-    /* --- 地库模式：天花板 + 灯带 --- */
+    /* --- 地库模式：天花板 + 灯带（roof 组：俯视上帝视角时整体隐藏，避免遮挡俯视相机） --- */
+    var roof = null;
     if (level.garage) {
+      roof = new THREE.Group();
       var ceil = new THREE.Mesh(new THREE.BoxGeometry(gw, 0.3, gh), new THREE.MeshLambertMaterial({ color: 0x585b60 }));
       ceil.position.set((b.minX + b.maxX) / 2, 3.4, (b.minZ + b.maxZ) / 2);
-      group.add(ceil);
+      roof.add(ceil);
       disposables.push(ceil.geometry, ceil.material);
       for (var i = 0; i < 5; i++) {
         var lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, gh * 0.7), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
         lamp.position.set(b.minX + 4 + i * (gw - 8) / 4, 3.2, (b.minZ + b.maxZ) / 2);
-        group.add(lamp);
+        roof.add(lamp);
         disposables.push(lamp.geometry, lamp.material);
       }
+      group.add(roof);
     }
 
     return {
       group: group,
+      roof: roof,   // 地库天顶组（俯视图时由 game.js 隐藏）；非地库关为 null
       dispose: function () {
         group.parent && group.parent.remove(group);
         disposables.forEach(function (d) { d.dispose && d.dispose(); });

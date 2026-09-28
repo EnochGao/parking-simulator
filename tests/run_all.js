@@ -53,6 +53,17 @@ section('物理模型');
   for (i = 0; i < 150; i++) c.update(1 / 60, { steer: -1 });
   check('松开保持：反打方向可回正并反向', c.steer < 0, 'a=' + c.steer.toFixed(3));
 
+  // 倒车蠕行：轻点 S 保持在蠕行速度，持续按住才加速到极速，松开后再点重新从蠕行开始
+  c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
+  for (i = 0; i < 30; i++) c.update(1 / 60, { drive: -1 }); // 0.5s < creepRampTime
+  check('倒车蠕行：轻点 S 保持蠕行速度', Math.abs(Math.abs(c.speed) - CFG.PHYS.creep / 3.6) < 0.02, 'v=' + c.speed.toFixed(3));
+  for (i = 0; i < 120; i++) c.update(1 / 60, { drive: -1 }); // 累计 2.5s > creepRampTime
+  check('倒车蠕行：持续按住后加速到极速', Math.abs(Math.abs(c.speed) - CFG.PHYS.maxRev) < 0.02, 'v=' + c.speed.toFixed(3));
+  for (i = 0; i < 40; i++) c.update(1 / 60, {});
+  check('倒车蠕行：松开 S 刹停', c.speed === 0);
+  for (i = 0; i < 10; i++) c.update(1 / 60, { drive: -1 }); // 再次轻点 0.17s
+  check('倒车蠕行：再次轻点重新从蠕行开始', Math.abs(Math.abs(c.speed) - CFG.PHYS.creep / 3.6) < 0.02, 'v=' + c.speed.toFixed(3));
+
   // 倒车（S = drive -1，档位自动切 R）
   c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
   for (i = 0; i < 120; i++) c.update(1 / 60, { drive: -1, steer: 0.5 });
@@ -216,6 +227,43 @@ LVL.LEVELS.forEach(function (lv) {
   else info += ' ' + (r.reason || '失败');
   check(lv.id + ' ' + lv.name, ok, info);
 });
+
+/* ---------------- 6. 手柄映射单元测试 ---------------- */
+section('手柄映射');
+(function () {
+  var GP = require(path.join(JS, 'gamepad.js'));
+  // 标准布局关键键位（盖世小鸡 XInput 模式等标准映射手柄通用）
+  check('手柄: 标准布局键位索引', GP.BTN.A === 0 && GP.BTN.B === 1 && GP.BTN.X === 2 && GP.BTN.Y === 3 &&
+    GP.BTN.LB === 4 && GP.BTN.RB === 5 && GP.BTN.LT === 6 && GP.BTN.RT === 7 &&
+    GP.BTN.BACK === 8 && GP.BTN.START === 9 && GP.BTN.UP === 12 && GP.BTN.LEFT === 14);
+  // 摇杆曲线：死区归零、渐进响应、满偏 1
+  check('手柄: 死区内归零', GP.steerCurve(0.05, 0.08) === 0 && GP.steerCurve(-0.08, 0.08) === 0);
+  check('手柄: 满偏幅值 1 且保号', GP.steerCurve(1, 0.08) === 1 && GP.steerCurve(-1, 0.08) === -1);
+  check('手柄: 渐进曲线中点减益', approx(GP.steerCurve(0.54, 0.08), 0.25, 1e-9), 'v=' + GP.steerCurve(0.54, 0.08).toFixed(3));
+  check('手柄: 曲线单调不减', GP.steerCurve(0.2, 0.08) < GP.steerCurve(0.5, 0.08) && GP.steerCurve(0.5, 0.08) < GP.steerCurve(0.9, 0.08));
+  // 输入合并：键盘优先（数字量），手柄模拟量补位，双空保持转角
+  var m = GP.mergeDrive(1, 0, { steer: -0.5, drive: 1, handbrake: true });
+  check('手柄: 键盘转向优先于摇杆', m.steer === 1);
+  check('手柄: 键盘松开油门时手柄扳机可接管', m.drive === 1);
+  check('手柄: 键盘与手柄都松开时为刹车', GP.mergeDrive(1, 0, { steer: -0.5, drive: null }).drive === 0);
+  check('手柄: 手柄手刹可叠加', m.handbrake === true);
+  check('手柄: 摇杆偏转时不保持转角', m.holdSteer === false);
+  m = GP.mergeDrive(0, 0, { steer: -0.5, drive: 1 });
+  check('手柄: 无键盘输入时用摇杆/扳机', m.steer === -0.5 && m.drive === 1);
+  m = GP.mergeDrive(0, 0, { steer: null, drive: null });
+  check('手柄: 双空输入保持转角待刹', m.steer === 0 && m.drive === 0 && m.holdSteer === true);
+  m = GP.mergeDrive(-0.4, -1, null);
+  check('手柄: 无手柄时纯键盘输入可用', m.steer === -0.4 && m.drive === -1);
+})();
+
+/* ---------------- 7. 手柄模块集成验证 ---------------- */
+section('手柄集成');
+(function () {
+  // 子进程运行 tools/gpad_itest.js（内部 mock navigator/document，避免污染本进程）
+  var r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'tools', 'gpad_itest.js')], { encoding: 'utf8' });
+  check('手柄集成：连接/菜单/驾驶/边缘开关/断连', r.status === 0,
+    (r.stdout || '').split('\n').filter(function (l) { return l.indexOf('✗') >= 0; }).join(' | '));
+})();
 
 /* ---------------- 汇总 ---------------- */
 console.log('\n========== 测试结果 ==========');

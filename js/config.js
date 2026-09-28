@@ -27,7 +27,20 @@
       handbrakeDecel: 9,
       bounceFactor: 0.3,
       stoppedEps: 0.04,
-      gearSwitchMaxSpeed: 0.2
+      gearSwitchMaxSpeed: 0.2,
+      creep: 1.4,           // 自动挡蠕行速度 km/h（挂 R 轻点 S 的保持速度）
+      creepRampTime: 1.2    // 持续按住倒车键超过该时长后，才从蠕行继续加速到倒车极速
+    },
+    RADAR: {
+      range: 2.5,           // 报警半径 m（对标真车 2.5m 间歇音）
+      urgent: 0.7           // 急促音距离 m
+    },
+    GAMEPAD: {
+      deadzone: 0.08,          // 左摇杆死区（归零阈值）
+      triggerThreshold: 0.12,  // RT/LT 扳机触发阈值（0..1 模拟量）
+      stickAsPad: 0.6,         // 左摇杆视为十字键的幅度（菜单导航/后视镜调节）
+      navRepeat: 0.18,         // 菜单焦点移动连发间隔 s
+      rumbleMs: 260            // 碰撞震动时长 ms
     },
     SCORE: {
       posFullM: 0.15,       // 位置满分偏差
@@ -40,8 +53,8 @@
       stopTime: 1.5,        // 停稳判定时长
       maxCollisions: 5      // 强制失败碰撞数
     },
-    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 46, revFov: 80, near: 0.12, far: 220 }
+    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 80, near: 0.12, far: 220 }
     // fov: 主相机垂直视场角（72° 接近真实车内透视）；mirrorFov/inMirrorFov: 外/内后视镜相机视场，
-    // 按 GB 15084（ECE R46）Ⅲ/Ⅰ类视野要求标定并适度放宽以保证可玩性；revFov: 倒影广角
+    // 内镜收窄对准后窗视野（减少自家车尾入镜）；revFov: 倒影广角
   };
 });

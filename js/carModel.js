@@ -56,11 +56,13 @@
     var body = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.52, 4.1), bodyM);
     body.position.y = 0.55; body.castShadow = true;
     g.add(body);
-    var cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 2.3), glassM);
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.64, 2.3), glassM);
     cabin.position.set(0, 1.02, -0.15); cabin.castShadow = true;
     g.add(cabin);
-    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 1.9), bodyM);
-    roof.position.set(0, 1.3, -0.15);
+    // 外顶板：抬升至 y 1.346-1.406（座舱加高），前缘缩到 z=0.45（z>0.45 为风挡区域）——
+    // 车内后视镜吊在车顶前缘正下方、贴着屏幕最上方，驾驶员视线从顶板前缘下方穿过不被遮挡
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 1.55), bodyM);
+    roof.position.set(0, 1.376, -0.325);
     g.add(roof);
 
     var wheelG = new THREE.CylinderGeometry(0.31, 0.31, 0.22, 14);
@@ -94,6 +96,7 @@
     return {
       group: g,
       cabin: cabin,
+      roof: roof,  // 车顶板（车内后视镜渲染时隐藏，避免镜中一大片自家车顶）
       frontWheels: frontWheels,
       brakeLights: [bl, br],
       brakeOff: 0x5a1e18, brakeOn: 0xff4a30,

@@ -75,3 +75,8 @@ h2 { margin-bottom: 16px; }
 .result-table td.bad { color: #ff7a66; font-weight: bold; }
 .btn-row { display: flex; gap: 10px; justify-content: center; }
 .btn-row .btn { margin: 0; width: auto; padding: 12px 26px; }
+
+/* ---------- 手柄支持 ---------- */
+.gpad-focus { border-color: #6fd66f !important; box-shadow: 0 0 0 2px rgba(111,214,111,.55), 0 0 16px rgba(111,214,111,.35); transform: translateY(-1px); }
+.gpad-toast { position: absolute; top: 62px; left: 50%; transform: translate(-50%, -8px); padding: 8px 20px; background: rgba(20,24,30,.92); border: 1px solid #3a4150; border-radius: 999px; color: #cfe8cf; font-size: 14px; opacity: 0; transition: all .3s; pointer-events: none; z-index: 30; white-space: nowrap; }
+.gpad-toast.show { opacity: 1; transform: translate(-50%, 0); }

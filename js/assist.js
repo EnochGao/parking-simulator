@@ -82,6 +82,11 @@
         engine.frequency.setTargetAtTime(f, ctx.currentTime, 0.05);
         engineGain.gain.setTargetAtTime(0.02 + Math.abs(speed) * 0.012, ctx.currentTime, 0.08);
       },
+      /** 引擎静音（暂停/回菜单时调用，否则持续音残留） */
+      engineOff: function () {
+        if (!ctx || !engineGain) return;
+        engineGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+      },
       thud: function () {
         if (!ensure() || !enabled) return;
         var o = ctx.createOscillator(), g = ctx.createGain();

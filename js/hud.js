@@ -41,6 +41,7 @@
       '    <span class="hud-stat">⏱ <b id="hud-time">0.0</b>s</span>' +
       '    <span class="hud-stat warn">💥 <b id="hud-coll">0</b>/5</span>' +
       '    <span class="hud-stat" id="hud-assist"></span>' +
+      '    <span class="hud-stat audio" id="hud-audio" title="音效开关">🔊</span>' +
       '  </div>' +
       '</div>' +
       '<div class="hud-bottom">' +
@@ -61,7 +62,10 @@
       $('hud-task-text').textContent = '目标：倒入白色标线车位';
       $('hud-coll').textContent = '0';
       $('hud-hint').textContent = level.tips ? level.tips[0] : '';
+      var ab = $('hud-audio');
+      ab.onclick = function () { api.onAudioToggle && api.onAudioToggle(); };
     };
+    api.setAudioOn = function (on) { $('hud-audio').textContent = on ? '🔊' : '🔇'; };
     api.hideHud = function () { hud.classList.add('hidden'); };
     api.update = function (state) {
       $('hud-time').textContent = state.time.toFixed(1);
@@ -70,7 +74,7 @@
       $('hud-gear').className = state.gear === 'R' ? 'r' : 'd';
       $('hud-speed').textContent = Math.round(Math.abs(state.speed) * 3.6);
       var bars = $('hud-radar').querySelectorAll('i');
-      var lv4 = state.radar != null ? Math.ceil(Math.max(0, 1 - state.radar / 1.5) * 4) : 0;
+      var lv4 = state.radar != null ? Math.ceil(Math.max(0, 1 - state.radar / 2.5) * 4) : 0; // 与 game.js 雷达报警半径 2.5m 一致
       for (var i = 0; i < 4; i++) bars[i].className = i < lv4 ? 'on' : '';
       $('hud-hint').textContent = state.hint || '';
       $('hud-assist').textContent = state.assistText || '';
@@ -85,6 +89,7 @@
     /* ---------- 全屏界面（菜单/简报/结算/暂停） ---------- */
     var screen = el('div', 'screen hidden');
     overlay.appendChild(screen);
+    api.screenEl = screen; // 手柄菜单导航需要读取当前界面按钮列表
 
     api.showScreen = function (node) {
       screen.innerHTML = '';
@@ -93,18 +98,28 @@
     };
     api.hideScreen = function () { screen.classList.add('hidden'); };
 
-    /* 主菜单 */
-    api.showMainMenu = function (onStart, onSelect) {
+    /* 主菜单。cont: {label, cb} 可选"继续训练"（已有进度时由 game.js 传入） */
+    api.showMainMenu = function (onStart, onSelect, cont) {
       var box = el('div', 'menu-box');
       box.appendChild(el('h1', 'game-title', '停车大师 <i>ParkMaster</i>'));
       box.appendChild(el('p', 'subtitle', '新手司机停车训练模拟器 · 老小区特训'));
-      var b1 = el('button', 'btn big', '开始训练');
-      b1.onclick = onStart;
+      if (cont) {
+        var bc = el('button', 'btn big', cont.label);
+        bc.onclick = cont.cb;
+        box.appendChild(bc);
+        var b0 = el('button', 'btn', '从头开始');
+        b0.onclick = onStart;
+        box.appendChild(b0);
+      } else {
+        var b1 = el('button', 'btn big', '开始训练');
+        b1.onclick = onStart;
+        box.appendChild(b1);
+      }
       var b2 = el('button', 'btn', '选择关卡');
       b2.onclick = onSelect;
-      box.appendChild(b1); box.appendChild(b2);
+      box.appendChild(b2);
       box.appendChild(el('p', 'menu-help',
-        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向（松开保持角度） · Q/E 转向灯<br>Z/X 按住看左右后视镜 · V 调后视镜角度 · H 引导线 · M 俯视图 · C 倒车影像 · Esc 暂停'));
+        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向（松开保持角度） · Q/E 转向灯<br>Z/X 按住看左右后视镜 · V 调后视镜角度 · H 引导线 · M 俯视图 · C 倒车影像 · Esc 暂停<br>🎮 手柄（XInput 模式）：左摇杆方向 · RT/LT 油门/倒车 · B 手刹 · X/Y 转向灯 · LB/RB 看镜 · Back 引导线 · Start 暂停<br>🎮 菜单中：摇杆/十字键移动 · A 确认 · B 返回 · 十字键↑↓ 俯视/倒影 · ← 调后视镜'));
       api.showScreen(box);
     };
 
@@ -132,6 +147,7 @@
       });
       box.appendChild(grid);
       var back = el('button', 'btn', '返回');
+      back.setAttribute('data-gp', 'back'); // 手柄 B 键返回
       back.onclick = onBack;
       box.appendChild(back);
       api.showScreen(box);
@@ -146,10 +162,11 @@
       (level.tips || []).forEach(function (t) { tips.appendChild(el('li', '', t)); });
       box.appendChild(tips);
       box.appendChild(el('p', 'brief-meta', '标准用时 ' + level.par + ' 秒 · 碰撞 ≤4 次仍可通过，剐蹭会扣分'));
-      var go = el('button', 'btn big', '开始 (回车)');
+      var go = el('button', 'btn big', '开始 (回车 / 手柄A)');
       go.onclick = onStart;
       box.appendChild(go);
       var back = el('button', 'btn', '返回选关');
+      back.setAttribute('data-gp', 'back');
       back.onclick = onBack;
       box.appendChild(back);
       api.showScreen(box);
@@ -169,7 +186,11 @@
       box.appendChild(el('div', 'result-stars ' + (pass ? 'win' : 'lose'), stars(result.stars)));
       box.appendChild(el('h2', '', pass ? '停车成功！' : '未能完成'));
       var table = el('table', 'result-table');
-      [['得分', result.score], ['位置偏差', (result.posOffset * 100).toFixed(1) + ' cm'],
+      // <1cm 用毫米显示，精准停车不再是冷冰冰的 "0.0 cm"
+      var posTxt = result.posOffset < 0.01
+        ? (result.posOffset * 1000).toFixed(0) + ' mm'
+        : (result.posOffset * 100).toFixed(1) + ' cm';
+      [['得分', result.score], ['位置偏差', posTxt],
        ['角度偏差', result.devDeg.toFixed(1) + '°'], ['碰撞', result.collisions + ' 次'],
        ['用时', result.time.toFixed(1) + ' s（标准 ' + level.par + 's）']
       ].forEach(function (row) {
@@ -189,6 +210,7 @@
         btns.appendChild(bNext);
       }
       var bMenu = el('button', 'btn', '返回菜单');
+      bMenu.setAttribute('data-gp', 'back');
       bMenu.onclick = onMenu;
       btns.appendChild(bMenu);
       box.appendChild(btns);
@@ -206,6 +228,7 @@
       b2.onclick = onRetry;
       box.appendChild(b2);
       var b3 = el('button', 'btn', '返回菜单');
+      b3.setAttribute('data-gp', 'back');
       b3.onclick = onMenu;
       box.appendChild(b3);
       api.showScreen(box);

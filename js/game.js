@@ -13,10 +13,11 @@
     this.cfg = PS.CONFIG;
     this.container = container;
 
-    /* 渲染器 */
+    /* 渲染器（宽高做下限守卫：页面在后台/被遮挡标签页加载时 innerWidth 可能为 0，
+     * 否则画布会被初始化成 0×0，玩家只看到黑屏且无法自愈） */
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -27,7 +28,7 @@
     this.scene.fog = new THREE.Fog(0x9db8c9, 60, 160);
 
     /* 相机（作为玩家车子对象，随车移动） */
-    this.camera = new THREE.PerspectiveCamera(this.cfg.VIEW.fov, window.innerWidth / window.innerHeight, 0.12, 220);
+    this.camera = new THREE.PerspectiveCamera(this.cfg.VIEW.fov, Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight), 0.12, 220);
     this.topCamera = new THREE.OrthographicCamera(-14, 14, 9, -9, 0.5, 120);
     this.usingTop = false;
     this.lookYaw = 0; this.lookPitch = 0; this.lookHeld = 0;
@@ -51,6 +52,7 @@
     this.carP = null;        // CarPhysics
     this.obstacles = [];
     this.keys = {};
+    this.kbHandbrake = false; // 键盘手刹（与手柄 B 合并后写入 input.handbrake）
     this.input = { steer: 0, drive: 0, handbrake: false };
     this.assist = { guide: true, top: false, revCam: true };
     this.mirrorMode = false;  // 后视镜调节模式（V 进入/退出，驾驶输入封锁）
@@ -61,6 +63,8 @@
     this.time = 0;
     this.collisions = 0;
     this.wasColliding = false;
+    this.lastColTime = -9;   // 上次碰撞计数时刻（同一次顶蹭 1s 冷却内不重复计数）
+    this.audioOn = true;     // 音效开关状态（HUD 🔊 按钮）
     this.radar = null;
     this.beepTimer = 0;
     this.audio = PS.Assist.createAudio();
@@ -70,12 +74,29 @@
     this.autopilotActive = false;
 
     this.bindInput();
+    // 手柄（盖世小鸡等标准布局）：逐帧轮询 Gamepad API，驾驶输入与菜单导航
+    this.gpad = PS.Gamepad.createGamepad(this, container);
     var self = this;
-    window.addEventListener('resize', function () {
-      self.renderer.setSize(window.innerWidth, window.innerHeight);
-      self.camera.aspect = window.innerWidth / window.innerHeight;
+    this.onResize = function () {
+      var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+      self.renderer.setSize(w, h);
+      self.camera.aspect = w / h;
       self.camera.updateProjectionMatrix();
+    };
+    window.addEventListener('resize', this.onResize);
+    // 从后台/被遮挡状态回到前台时重设画布（加载时尺寸为 0 的自愈）
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) self.onResize();
     });
+    // 鼠标点击也解锁音频（此前只有按键会解锁，点击开始后前几秒无声）
+    document.addEventListener('mousedown', function () { self.audio.unlock(); });
+    // HUD 音效开关
+    this.hud.onAudioToggle = function () {
+      self.audioOn = !self.audioOn;
+      self.audio.setEnabled(self.audioOn);
+      if (!self.audioOn) self.audio.engineOff();
+      self.hud.setAudioOn(self.audioOn);
+    };
     this.renderer.setAnimationLoop(function () { self.frame(); });
   }
 
@@ -102,7 +123,7 @@
         case 'KeyE': self.indicator.side = self.indicator.side === 2 ? 0 : 2; break;
         case 'KeyZ': self.lookHeld = 1; break;  // 按住转头看左后视镜
         case 'KeyX': self.lookHeld = 2; break;  // 按住转头看右后视镜
-        case 'Space': self.input.handbrake = true; e.preventDefault(); break;
+        case 'Space': self.kbHandbrake = true; e.preventDefault(); break;
         case 'KeyV': self.mirrorMode = !self.mirrorMode; break; // 后视镜调节模式
         case 'Digit1': case 'Numpad1': if (self.mirrorMode) self.mirrorSel = 0; break;
         case 'Digit2': case 'Numpad2': if (self.mirrorMode) self.mirrorSel = 1; break;
@@ -114,7 +135,7 @@
     });
     document.addEventListener('keyup', function (e) {
       if (KEYMAP[e.code]) self.keys[KEYMAP[e.code]] = false;
-      if (e.code === 'Space') self.input.handbrake = false;
+      if (e.code === 'Space') self.kbHandbrake = false;
       if (e.code === 'KeyZ' && self.lookHeld === 1) self.lookHeld = 0;
       if (e.code === 'KeyX' && self.lookHeld === 2) self.lookHeld = 0;
     });
@@ -133,6 +154,14 @@
 
     var tex = this.textures || (this.textures = PS.Textures.createTextures());
     this.worldH = PS.World.createWorld(this.scene, lv, tex);
+    // 地库关压暗天空/雾色：舱内透过车窗不再看到蓝天砖楼，符合地下环境
+    if (lv.garage) {
+      this.scene.background = new THREE.Color(0x23262b);
+      this.scene.fog = new THREE.Fog(0x23262b, 24, 80);
+    } else {
+      this.scene.background = new THREE.Color(0x9db8c9);
+      this.scene.fog = new THREE.Fog(0x9db8c9, 60, 160);
+    }
 
     this.car = PS.CarModel.buildPlayerCar();
     this.car.group.position.set(lv.player.x, 0, lv.player.z);
@@ -142,8 +171,9 @@
     this.cockpit = PS.Cockpit.buildInterior(this.car.group);
     // 后视镜组随新车重建（旧车组已被释放）
     if (this.mirrorH) this.mirrorH.dispose();
-    // 渲染镜面画面时隐藏内饰与舱玻璃 → 镜中可见车身侧面/后轮
-    this.mirrorH = PS.Cockpit.buildMirrors(this.car.group, this.renderer, [this.cockpit.interior, this.car.cabin]);
+    // 渲染镜面画面时隐藏内饰与舱玻璃 → 镜中可见车身侧面/后轮；
+    // 车内后视镜画面额外隐藏车顶板（否则镜中一大片是自家车顶+车尾）
+    this.mirrorH = PS.Cockpit.buildMirrors(this.car.group, this.renderer, [this.cockpit.interior, this.car.cabin], [this.car.roof]);
     // 倒车影像屏挂在中控台（车内居中 x=0），随头转动保持真实车内位置；
     // 作为 interior 子对象，镜面/倒车渲染隐藏内饰时自动一同隐藏
     this.cockpit.interior.add(this.mirrorH.revPlane);
@@ -174,6 +204,7 @@
     this.guide.setVisible(this.assist.guide);
 
     this.time = 0; this.collisions = 0; this.wasColliding = false;
+    this.lastColTime = -9;
     this.stopTimer = 0; this.indicator.side = 0;
     this.usingTop = false; this.assist.top = false;
     this.hud.showHud(lv);
@@ -200,14 +231,36 @@
   Game.prototype.pause = function () {
     var self = this;
     this.state = 'paused';
+    this.audio.engineOff(); // 暂停时引擎声不停会一直轰鸣
     this.hud.showPause(function () { self.resume(); }, function () { self.restart(); }, function () { self.toMenu(); });
   };
   Game.prototype.resume = function () { this.hud.hideScreen(); this.state = 'playing'; };
+  /** 计算续玩目标关：进度链里第一个未拿星的关卡（全通关则为最后一关） */
+  Game.prototype.continueTarget = function () {
+    var prog = this.PS.Hud.loadProgress();
+    var target = null;
+    this.PS.Levels.LEVELS.forEach(function (lv) {
+      var rec = prog.levels[lv.id];
+      if (!target && !(rec && rec.stars > 0)) target = lv;
+    });
+    return target || this.PS.Levels.LEVELS[this.PS.Levels.LEVELS.length - 1];
+  };
   Game.prototype.toMenu = function () {
     this.state = 'menu';
+    this.audio.engineOff();
     this.hud.hideHud();
     var self = this;
-    this.hud.showMainMenu(function () { self.toSelect(); }, function () { self.toSelect(); });
+    var cont = null;
+    var target = this.continueTarget();
+    var prog = this.PS.Hud.loadProgress();
+    var hasProgress = Object.keys(prog.levels || {}).some(function (k) { return prog.levels[k] && prog.levels[k].stars > 0; });
+    if (hasProgress && target) {
+      cont = {
+        label: '继续训练 · 第 ' + target.id.replace('lv', '') + ' 关 ' + target.name,
+        cb: function () { self.loadLevel(target.id, 'play'); }
+      };
+    }
+    this.hud.showMainMenu(function () { self.toSelect(); }, function () { self.toSelect(); }, cont);
   };
   Game.prototype.toSelect = function () {
     var self = this;
@@ -226,6 +279,7 @@
     });
     this.state = 'result';
     this.audio.chime(ev.stars > 0);
+    this.audio.engineOff();
     var self = this;
     this.hud.showResult(this.level, ev,
       function () { self.restart(); },
@@ -240,6 +294,7 @@
     if (!this.lastT) this.lastT = now;
     var elapsed = Math.min(0.1, now - this.lastT);
     this.lastT = now;
+    this.gpad.poll(elapsed); // 手柄轮询（连接检测/边缘事件/菜单导航），先于物理步进
 
     if (this.state === 'playing' || (this.state === 'result' && this.carP)) {
       this.acc += elapsed;
@@ -265,10 +320,10 @@
     if (!this.autopilotActive) {
       var k = this.keys;
       if (this.mirrorMode) {
-        // 后视镜调节模式：驾驶输入封锁（松开即刹车停稳），方向键改为调节选中镜面
+        // 后视镜调节模式：驾驶输入封锁（松开即刹车停稳），方向键/十字键改为调节选中镜面
         this.input.steer = 0; this.input.drive = 0; this.input.handbrake = false; this.input.holdSteer = true;
-        var dy = (k.a ? 1 : 0) - (k.d ? 1 : 0);
-        var dp = (k.w ? 1 : 0) - (k.s ? 1 : 0);
+        var dy = Math.max(-1, Math.min(1, (k.a ? 1 : 0) - (k.d ? 1 : 0) + (this.gpad.padLeft() ? 1 : 0) - (this.gpad.padRight() ? 1 : 0)));
+        var dp = Math.max(-1, Math.min(1, (k.w ? 1 : 0) - (k.s ? 1 : 0) + (this.gpad.padUp() ? 1 : 0) - (this.gpad.padDown() ? 1 : 0)));
         var mir = this.mirrorH && this.mirrorH.mirrors[this.mirrorSel];
         if (mir && (dy || dp)) {
           mir.adjYaw = PS.Physics.clamp(mir.adjYaw + dy * 0.7 * DT, -0.35, 0.35);   // ±20°
@@ -277,9 +332,13 @@
           this.mirrorAdj[this.mirrorSel] = { y: mir.adjYaw, p: mir.adjPitch };
         }
       } else {
-        this.input.steer = (k.a ? 1 : 0) - (k.d ? 1 : 0);
-        this.input.drive = (k.w ? 1 : 0) - (k.s ? 1 : 0); // W 前进 / S 倒车 / 松开即刹车
-        this.input.holdSteer = !k.a && !k.d;              // 松开方向键保持转角，不自动回正
+        // 键盘优先，手柄（左摇杆/RT/LT/B）补位：模拟量摇杆利于泊车微调
+        var gs = this.gpad.drive();
+        var m = PS.Gamepad.mergeDrive((k.a ? 1 : 0) - (k.d ? 1 : 0), (k.w ? 1 : 0) - (k.s ? 1 : 0), gs);
+        this.input.steer = m.steer;
+        this.input.drive = m.drive;                 // W 前进 / S 倒车 / RT·LT / 松开即刹车
+        this.input.holdSteer = m.holdSteer;         // 松开方向（摇杆居中）保持转角，不自动回正
+        this.input.handbrake = this.kbHandbrake || m.handbrake;
       }
     }
     var r = this.carP.update(DT, this.input);
@@ -294,10 +353,14 @@
     var obb = COL.carObb(this.carP.x, this.carP.z, this.carP.heading, this.cfg.CAR);
     var hi = COL.firstHit(obb, this.obstacles);
     if (hi >= 0) {
-      if (!this.wasColliding) {
+      // 碰撞计数带 1s 冷却：顶墙时"反弹→再蹭"的连续接触只记 1 次（真实感知为一次剐蹭），
+      // 但每次接触仍有反弹与推离反馈
+      if (!this.wasColliding && this.time - this.lastColTime >= 1.0) {
         this.collisions++;
+        this.lastColTime = this.time;
         this.audio.thud();
         this.hud.flash();
+        this.gpad.rumble(0.9, 0.5, this.cfg.GAMEPAD ? this.cfg.GAMEPAD.rumbleMs : 260); // 碰撞手柄震动
       }
       this.carP.bounce();
       /* 位置修正：沿最小穿透方向逐次推出，避免车身嵌入障碍物（穿模） */
@@ -342,23 +405,28 @@
       return;
     }
 
-    /* 雷达与音效 */
+    /* 雷达与音效（报警半径对标真车 2.5m 间歇音；距离越近蜂鸣越密） */
+    var RR = this.cfg.RADAR ? this.cfg.RADAR.range : 2.5;
+    var RU = this.cfg.RADAR ? this.cfg.RADAR.urgent : 0.7;
     this.radar = this.carP.gear === 'R' ? this.PS.Assist.rearDistance(this.carP, this.cfg.CAR, this.obstacles) : null;
-    if (this.radar != null && this.radar < 1.5) {
+    if (this.radar != null && this.radar < RR) {
       this.beepTimer -= DT;
       if (this.beepTimer <= 0) {
-        this.audio.beep(this.radar < 0.5);
-        this.beepTimer = Math.max(0.12, this.radar / 1.5 * 0.8);
+        this.audio.beep(this.radar < RU);
+        this.beepTimer = Math.max(0.1, this.radar / RR * 0.6);
       }
     }
     this.audio.engine(this.carP.speed);
+    // 无情境提示时轮播本关教学要点（每 6s 一条）
+    var tips = (this.level && this.level.tips) || [];
+    var tipTxt = tips.length ? tips[Math.floor(this.time / 6) % tips.length] : '';
     this.hud.update({
       time: this.time, collisions: this.collisions, gear: this.carP.gear, speed: this.carP.speed,
       radar: this.radar,
       hint: this.mirrorMode ?
         '后视镜调节 [' + (this.mirrorSel === 0 ? '左外镜' : this.mirrorSel === 1 ? '右外镜' : '车内镜') + '] · A/D 左右 · W/S 上下 · 1/2/3 切换 · V 完成' :
         (!ev.completed && ev.posOffset < 3 && ev.inside ? '很好！停稳保持…' :
-        (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右') : '')),
+        (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右') : tipTxt)),
       assistText: (this.assist.guide ? '引导✓' : '') + (this.assist.top ? ' 俯视✓' : '') + (this.assist.revCam ? ' 倒影✓' : '')
     });
   };
@@ -374,15 +442,15 @@
     if (this.cockpit) {
       this.cockpit.wheelGroup.rotation.z = -fw * (this.cfg.CAR.steerVisualRatio || 8);
     }
-    /* 刹车灯：手刹 / 松开按键滑行刹车中 / 前进中按 S 减速 */
+    /* 刹车灯：手刹 / 松开油门滑行刹车中 / 前进中挂倒车减速（键盘与手柄统一看 input.drive） */
     var spd = this.carP ? this.carP.speed : 0;
     /* 仪表盘实时刷新（转速/时速指针；数值不变不重绘） */
     if (this.cockpit.updateGauges) {
       this.cockpit.updateGauges(Math.abs(spd) * 3.6, this.carP.gear);
     }
     var braking = this.input.handbrake ||
-      (!this.keys.w && !this.keys.s && Math.abs(spd) > 0.05) ||
-      (this.keys.s && spd > 0.05);
+      (this.input.drive === 0 && Math.abs(spd) > 0.05) ||
+      (this.input.drive < 0 && spd > 0.05);
     var bl = braking ? this.car.brakeOn : this.car.brakeOff;
     this.car.brakeLights.forEach(function (l) { l.material.color.setHex(bl); });
     /* 转向灯闪烁 */
@@ -405,14 +473,18 @@
     this.sun.position.set(this.carP.x + 18, 30, this.carP.z + 12);
     this.sun.target.position.set(this.carP.x, 0, this.carP.z);
 
-    /* 俯视相机跟随 */
-    var b = this.level ? this.level.bounds : null;
-    this.topCamera.left = -15; this.topCamera.right = 15;
-    this.topCamera.top = 10.5; this.topCamera.bottom = -10.5;
+    /* 俯视相机跟随（垂直视域固定，水平随窗口宽高比扩展，避免画面拉伸失真） */
+    var topAspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+    var halfH = 10.5, halfW = Math.min(26, halfH * topAspect);
+    this.topCamera.left = -halfW; this.topCamera.right = halfW;
+    this.topCamera.top = halfH; this.topCamera.bottom = -halfH;
     this.topCamera.position.set(this.carP.x, 42, this.carP.z);
     this.topCamera.up.set(0, 0, -1);
     this.topCamera.lookAt(this.carP.x, 0, this.carP.z);
     this.topCamera.updateProjectionMatrix();
+
+    /* 地库天顶组：俯视上帝视角时隐藏，否则天花板挡住整个俯视画面 */
+    if (this.worldH && this.worldH.roof) this.worldH.roof.visible = !this.assist.top;
 
     /* 倒车影像显隐（俯视上帝视角时隐藏，避免屏幕悬在车顶上方） */
     if (this.mirrorH) {
