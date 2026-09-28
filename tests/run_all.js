@@ -64,6 +64,17 @@ section('物理模型');
   for (i = 0; i < 10; i++) c.update(1 / 60, { drive: -1 }); // 再次轻点 0.17s
   check('倒车蠕行：再次轻点重新从蠕行开始', Math.abs(Math.abs(c.speed) - CFG.PHYS.creep / 3.6) < 0.02, 'v=' + c.speed.toFixed(3));
 
+  // 蠕行钳制只限加速不回拍：后溜中松开再按 S，速度不被瞬间压回蠕行值，而是从当前速度继续加速
+  c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
+  for (i = 0; i < 180; i++) c.update(1 / 60, { drive: -1 }); // 倒车至极速
+  for (i = 0; i < 4; i++) c.update(1 / 60, {});              // 松开 4 帧：蠕行计时清零、车仍在后溜
+  var vRoll = c.speed;
+  check('蠕行不回拍：场景成立（后溜快于蠕行）', vRoll < -CFG.PHYS.creep / 3.6, 'v=' + vRoll.toFixed(3));
+  c.update(1 / 60, { drive: -1 });                           // 再按住 S 第 1 帧
+  check('蠕行不回拍：续按第 1 帧不顿挫回拍', c.speed <= vRoll, 'v=' + c.speed.toFixed(3) + ' roll=' + vRoll.toFixed(3));
+  for (i = 0; i < 30; i++) c.update(1 / 60, { drive: -1 });
+  check('蠕行不回拍：续按从当前速度平滑加速到极速', Math.abs(Math.abs(c.speed) - CFG.PHYS.maxRev) < 0.02, 'v=' + c.speed.toFixed(3));
+
   // 倒车（S = drive -1，档位自动切 R）
   c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
   for (i = 0; i < 120; i++) c.update(1 / 60, { drive: -1, steer: 0.5 });

@@ -82,18 +82,26 @@
         if (Math.abs(this.speed) <= dvb) this.speed = 0;
         else this.speed -= Math.sign(this.speed) * dvb;
       } else {
-        this.speed += drive * P.accel * dt;
         // 极速限制（前进 / 倒车各有限速）
         var maxAbs = drive > 0 ? P.maxFwd : P.maxRev;
-        // 倒车蠕行：轻点 S（按住时长不足 creepRampTime）时保持在蠕行速度，
-        // 持续按住才继续加速到倒车极速——为泊车提供低速精细控制
+        // 倒车蠕行：新按下的前 creepRampTime 秒钳在蠕行速度（轻点＝低速对位），
+        // 之后经既有加速度平滑拉起到倒车极速，无阶跃感
         if (drive < 0) {
-          this._revHold = (this._revHold || 0) + dt;
-          if (this._revHold < P.creepRampTime) maxAbs = Math.min(maxAbs, P.creep / 3.6);
+          var creepAbs = P.creep / 3.6;
+          if (this._revHold == null) this._revHold = 0;
+          // 已在蠕行速度以上后溜（松开后再按 S）：蠕行窗口视同已过，不叠加迟滞
+          if (this._revHold < P.creepRampTime && -this.speed > creepAbs) this._revHold = P.creepRampTime;
+          this._revHold += dt;
+          if (this._revHold < P.creepRampTime) maxAbs = Math.min(maxAbs, creepAbs);
         } else {
           this._revHold = 0;
         }
-        if (this.speed * drive > maxAbs) this.speed = maxAbs * drive;
+        // 钳制只限加速：未超速时正常拉起、到顶钳住；
+        // 已超速（后溜中续按）保持滑行不回拍，避免速度被瞬间压回蠕行值的顿挫
+        if (this.speed * drive <= maxAbs) {
+          this.speed += drive * P.accel * dt;
+          if (this.speed * drive > maxAbs) this.speed = maxAbs * drive;
+        }
       }
     } else {
       // 无输入＝刹车：平顺制动至完全停稳

@@ -21,15 +21,14 @@
       accel: 3.0,           // 油门加速度
       brake: 6.0,           // 制动减速度
       drag: 0.6,            // 自然阻力
-      creep: 1.4,           // 自动挡蠕行速度
       steerRate: 55 * D2R,  // 前轮转向速率 rad/s
       centerRate: 70 * D2R, // 回正速率
       handbrakeDecel: 9,
       bounceFactor: 0.3,
       stoppedEps: 0.04,
       gearSwitchMaxSpeed: 0.2,
-      creep: 1.4,           // 自动挡蠕行速度 km/h（挂 R 轻点 S 的保持速度）
-      creepRampTime: 1.2    // 持续按住倒车键超过该时长后，才从蠕行继续加速到倒车极速
+      creep: 1.4,           // 自动挡蠕行速度 km/h（挂 R 轻点 S 的保持速度；演示路径车速同此值，改值需重算关卡演示脚本）
+      creepRampTime: 0.6    // 持续按住倒车键超过该时长后，从蠕行平滑加速到倒车极速（此前轻点＝蠕行对位）
     },
     RADAR: {
       range: 2.5,           // 报警半径 m（对标真车 2.5m 间歇音）
