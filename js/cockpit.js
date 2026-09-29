@@ -23,8 +23,10 @@
     dashTop.position.set(0, 0.89, 0.93);
     interior.add(dashTop);
 
-    // 左右门板上部（真实车内视野被门板包住，不露车底）
-    [-0.76, 0.76].forEach(function (dx) {
+    // （舱内地板由外观模型的座舱段提供：地板下沉铺深色，此处不再重复铺设）
+
+    // 左右门板上部（真实车内视野被门板包住，不露车底；外侧面贴齐飞度车宽半 0.847）
+    [-0.745, 0.745].forEach(function (dx) {
       var door = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.62, 1.1), dm);
       door.position.set(dx, 0.62, 0.25);
       interior.add(door);
@@ -55,13 +57,16 @@
     screenBezel.position.set(0, 1.005, 0.662);
     interior.add(screenBezel);
 
-    // 车内后视镜安装臂：贴着车顶底面（y 1.346）水平向前，接到镜壳背面顶部——真车方式；
-    // 臂底面 1.3325 高于镜面顶边 1.3305（2.5mm 间隙），从镜面上方越过不接触。
+    // 车内后视镜吊装臂：横臂贴着车顶内饰底面（y≈1.453）水平向前，末端竖杆下探接镜壳——
+    // 真车后视镜即"横臂+吊杆"悬在风挡顶部；镜面位置（y 1.2805）保持不变，取景不变。
     // 属于内饰组：镜面渲染时随内饰一起隐藏，不会挡住内镜画面。
     // 臂保持固定——真车调节时臂不动，整个镜头（壳+镜片）绕球头一起转（见 buildMirrors）
     var stem = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.25), dark(0x1a1c20));
-    stem.position.set(0.22, 1.345, 0.475);
+    stem.position.set(0.22, 1.4375, 0.475);
     interior.add(stem);
+    var drop = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.125, 0.025), dark(0x1a1c20));
+    drop.position.set(0.22, 1.394, 0.55);
+    interior.add(drop);
 
     // 中央通道（副驾侧矮台，位于屏体后方）
     var console_ = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.45), dm);
@@ -101,17 +106,19 @@
     interior.add(seat(0.36));
     interior.add(seat(-0.36));
 
-    // 车顶内饰 + A 柱
-    var roofIn = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.05, 1.5), dm);
-    roofIn.position.set(0, 1.48, -0.75);
+    // 车顶内饰 + A 柱（飞度座舱：顶棚贴在外观车顶板 1.45–1.51 内侧）
+    var roofIn = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.05, 2.0), dm);
+    roofIn.position.set(0, 1.478, -0.575);
     interior.add(roofIn);
-    var pilG = new THREE.BoxGeometry(0.07, 0.32, 0.08);
+    // A 柱：短柱风格（同旧版 0.32m 量级），悬在风挡上角作边框点缀——
+    // 全高立柱会在视野里形成贯穿大半屏的粗黑斜梁，喧宾夺主
+    var pilG = new THREE.BoxGeometry(0.07, 0.36, 0.08);
     var pa = new THREE.Mesh(pilG, dm);
-    pa.position.set(-0.78, 1.32, 0.62);
+    pa.position.set(-0.77, 1.33, 0.58);
     pa.rotation.z = 14 * D2R;
     interior.add(pa);
     var pb = new THREE.Mesh(pilG, dm);
-    pb.position.set(0.78, 1.32, 0.62);
+    pb.position.set(0.77, 1.33, 0.58);
     pb.rotation.z = -14 * D2R;
     interior.add(pb);
 
@@ -179,12 +186,8 @@
     makeMirror({ x: 0.86, y: 1.06, z: 0.82 }, { x: 0.94, y: 1.05, z: 0.80 }, -147, -24, [0.30, 0.16], true, EXT_FOV, -4);
     // 右外后视镜（副驾侧 -x）：稍向内收以进入固定视野，配合转头键完整可见
     makeMirror({ x: -0.55, y: 1.06, z: 0.85 }, { x: -0.63, y: 1.05, z: 0.83 }, 131, 24, [0.30, 0.16], true, EXT_FOV, -4);
-    // 镜面 0.34×0.125：比遮罩孔大一圈——遮罩贴面 1mm（视差 ≤0.9mm），
-    // 玻璃包住孔、遮罩包住玻璃，边框收窄到 6-10mm（真车薄框）且不漏缝
-    // 镜面中心 y=1.20：镜面顶边 1.2625，吊装臂底面 1.27 从上方越过（7.5mm 间隙）互不接触；
-    // 其余同轴要素不变（yaw 173°、相机正对车后、仰角 +2°、防眩目 tint、渲染时隐藏车顶板）
-    // 镜面中心 y=1.2805：吊在车顶前缘（底面 1.346）正下方，仰角 13.6°——屏幕最上沿区域；
-    // 镜面 0.34×0.10，顶边 1.3305 在臂底面（1.3325）下方 2.5mm 互不接触；
+    // 镜面 0.34×0.10：顶边 1.3305，吊杆底端 1.3315 在其上方 1mm 互不接触；
+    // 吊在车顶前缘正下方（吊装结构见 buildInterior），从眼位仰角 13.6°——屏幕最上沿区域；
     // 其余同轴要素不变（yaw 173°、相机正对车后、仰角 +2°、防眩目 tint、渲染时隐藏车顶板）
     var intMirror = makeMirror({ x: 0.22, y: 1.2805, z: 0.55 }, { x: 0.22, y: 1.2805, z: 0.55 }, 173, 0, [0.34, 0.10], false, INT_FOV, 2, interiorHideExtra, 0xa9bac9);
 

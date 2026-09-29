@@ -8,11 +8,20 @@
   return {
     D2R: D2R,
     CAR: {
-      length: 4.2,          // 车长 m
-      width: 1.75,          // 车宽 m
-      wheelbase: 2.55,      // 轴距 m
-      maxSteer: 33 * D2R,   // 前轮最大转角
-      steerVisualRatio: 270 / 33, // 方向盘视觉转角/前轮转角
+      // 本田飞度 第四代 GR9（2021款 1.5L CVT）公开参数：
+      // 4109×1694×1537mm，轴距 2530mm，前/后轮距 1480/1465mm，整备质量 1088kg，
+      // L15BU 1.5L 自吸 96kW(131Ps)/155N·m，CVT 前驱，轮胎 185/60 R15，
+      // 最小转弯半径约 4.9m（前外轮轮迹）→ 反推前轮最大转角（见 maxSteer 注释）
+      length: 4.109,        // 车长 m
+      width: 1.694,         // 车宽 m
+      height: 1.537,        // 车高 m（外观模型参考；碰撞 OBB 只用车长/车宽）
+      wheelbase: 2.53,      // 轴距 m
+      trackF: 1.48,         // 前轮距 m
+      trackR: 1.465,        // 后轮距 m
+      tireR: 0.3015,        // 轮胎滚动半径 m（185/60 R15：直径≈603mm）
+      maxSteer: 36 * D2R,   // 前轮最大转角：由最小转弯半径 4.9m 反推
+                            // R=√((L/tanδ+trackF/2)²+L²)=4.9 → δ≈36.2°，取整 36°
+      steerVisualRatio: 270 / 36, // 方向盘视觉转角/前轮转角（满舵 ±270°）
       seatX: 0.36, seatY: 1.16, seatZ: 0.05 // 驾驶员眼位(车体局部坐标, 左舵)
     },
     PHYS: {

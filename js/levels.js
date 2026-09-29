@@ -24,9 +24,9 @@
   function tree(x, z) { return { t: 'tree', x: x, z: z, a: 0 }; }
   function bin(x, z, a) { return { t: 'bin', x: x, z: z, a: a || 0 }; }
 
-  /* 车位邻居工具：把宽 w 的车位两侧摆上车（随位角度） */
+  /* 车位邻居工具：把宽 w 的车位两侧摆上车（随位角度）；0.847 = 飞度车宽 1.694 的一半 */
   function neighbors(spot, gap) {
-    var a = spot.a * D2R, off = spot.w / 2 + 0.875 + (gap == null ? 0.05 : gap);
+    var a = spot.a * D2R, off = spot.w / 2 + 0.847 + (gap == null ? 0.05 : gap);
     var px = Math.cos(a), pz = -Math.sin(a);
     return [car(spot.x + px * off, spot.z + pz * off, spot.a),
             car(spot.x - px * off, spot.z - pz * off, spot.a)];
@@ -164,11 +164,11 @@
     /* ---------------- 9 极限侧方 ---------------- */
     {
       id: 'lv09', name: '极限侧方·5.7 米窄位', diff: 4, par: 100,
-      desc: '前后车间隙仅 5.7 米（车长 4.2 米），考验揉库精细度。',
+      desc: '前后车间隙仅 5.7 米（车长 4.1 米），考验揉库精细度。',
       tips: ['前后各留半米，倒车幅度要小', '多次前后揉库很正常，稳住心态', '看好右后视镜里前车尾的距离'],
       player: { x: -10, z: -2.3, a: 90 },
       spot: { x: 0, z: 1.05, a: 90, w: 2.4, l: 5.6 },
-      obstacles: [car(-5.1, 1.05, 90), car(5.1, 1.05, 90),
+      obstacles: [car(-4.9045, 1.05, 90), car(4.9045, 1.05, 90),
         wall(0, 2.6, 90, 30, 0.3, 0.45),
         tree(-12, -6), tree(12, -6), bldg(0, 12, 90, 34, 9, 11)],
       bounds: { minX: -16, maxX: 16, minZ: -9, maxZ: 9 },
@@ -199,9 +199,9 @@
     }
   ];
 
-  /** 障碍物默认尺寸（完整尺寸） */
+  /** 障碍物默认尺寸（完整尺寸；car 为飞度：1.694 × 4.109 × 1.52） */
   var DIMS = {
-    car:    { w: 1.75, l: 4.2, h: 1.42 },
+    car:    { w: 1.694, l: 4.109, h: 1.52 },
     pillar: { w: 0.5,  l: 0.5, h: 3.0 },
     tree:   { w: 0.6,  l: 0.6, h: 2.6 },
     bin:    { w: 0.76, l: 0.76, h: 1.05 }
