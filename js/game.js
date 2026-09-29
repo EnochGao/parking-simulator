@@ -171,9 +171,11 @@
     this.cockpit = PS.Cockpit.buildInterior(this.car.group);
     // 后视镜组随新车重建（旧车组已被释放）
     if (this.mirrorH) this.mirrorH.dispose();
-    // 渲染镜面画面时隐藏内饰与舱玻璃 → 镜中可见车身侧面/后轮；
+    // 渲染镜面画面时隐藏内饰 → 镜中可见封闭车身侧面/后轮（舱玻璃保留，
+    // 左外镜相机在车外，镜中呈现带玻璃的完整车身；右外镜/车内镜相机在盒体
+    // 内部，背面剔除后画面不受影响）；
     // 车内后视镜画面额外隐藏车顶板（否则镜中一大片是自家车顶+车尾）
-    this.mirrorH = PS.Cockpit.buildMirrors(this.car.group, this.renderer, [this.cockpit.interior, this.car.cabin], [this.car.roof]);
+    this.mirrorH = PS.Cockpit.buildMirrors(this.car.group, this.renderer, [this.cockpit.interior], [this.car.roof]);
     // 倒车影像屏挂在中控台（车内居中 x=0），随头转动保持真实车内位置；
     // 作为 interior 子对象，镜面/倒车渲染隐藏内饰时自动一同隐藏
     this.cockpit.interior.add(this.mirrorH.revPlane);
@@ -495,9 +497,10 @@
   Game.prototype.render = function () {
     var cam = this.assist.top ? this.topCamera : this.camera;
     if (this.car) {
-      // 舱内视角隐藏座舱玻璃盒（避免从内侧遮挡视线）；俯视时玻璃盒与内饰都隐藏
-      //（内饰件如车顶衬板/A 柱会穿出车顶，俯视图中显示为悬空碎块）
-      this.car.cabin.visible = this.assist.top;
+      // 座舱玻璃盒常显：主相机在盒体内部，FrontSide 背面剔除后不影响舱内视线；
+      // 车外任意视角（外部机位/俯视）都能看到封闭的玻璃舱体，不再是"敞篷车"。
+      // 俯视时仍隐藏内饰（车顶衬板/A 柱穿出车顶，俯视图中显示为悬空碎块）
+      this.car.cabin.visible = true;
       if (this.cockpit) this.cockpit.interior.visible = !this.assist.top;
     }
     if (this.mirrorH && this.car && !this.assist.top) {

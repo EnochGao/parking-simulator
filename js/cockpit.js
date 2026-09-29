@@ -128,7 +128,7 @@
 
   /**
    * 后视镜组：左右外后视镜 + 车内后视镜 + 倒车影像中控屏
-   * hideInMirror: 渲染镜面画面时需要隐藏的对象（内饰组/舱玻璃），保留外观使镜中可见车身
+   * hideInMirror: 渲染镜面画面时需要隐藏的对象（内饰组），保留外观与舱玻璃使镜中可见封闭车身
    * interiorHideExtra: 仅渲染车内后视镜画面时额外隐藏的对象（如车顶板）
    * 返回 { render(renderer, scene), mirrors:[{grp,plane,cam,adjYaw,adjPitch,apply()}], revCam, revPlane, revRt }
    */
@@ -236,7 +236,7 @@
       carGroup.visible = false;
       renderer.setRenderTarget(revRt);
       renderer.render(scene, revCam);
-      // 后视镜：隐藏内饰与舱玻璃，保留外观 → 镜中可见车身侧面与后轮（真实参照）
+      // 后视镜：隐藏内饰，保留外观与舱玻璃 → 镜中可见封闭车身侧面与后轮（真实参照）
       var saved = [];
       for (var k = 0; k < hideInMirror.length; k++) {
         saved.push([hideInMirror[k], hideInMirror[k].visible]);
