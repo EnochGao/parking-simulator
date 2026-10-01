@@ -469,8 +469,9 @@
       if (Math.abs(this.lookYaw - lookTarget) < 0.005) this.lookYaw = lookTarget;
     }
     this.camera.rotation.y = Math.PI + this.lookYaw;
-    // rotation.y=π 时欧拉 XYZ 下 x 分量方向相反：+7° 即视线向下俯（真实驾驶视线，仪表台入画）
-    this.camera.rotation.x = this.lookPitch + 7 * D2R;
+    // rotation.y=π 时欧拉 XYZ 下 x 分量方向相反：+5° 即视线向下俯——飞度高座椅、低仪表台，
+    // 视线越过台面看到液晶仪表与大片引擎盖，仪表台入画但不喧宾夺主
+    this.camera.rotation.x = this.lookPitch + 5 * D2R;
     /* 太阳灯跟随 */
     this.sun.position.set(this.carP.x + 18, 30, this.carP.z + 12);
     this.sun.target.position.set(this.carP.x, 0, this.carP.z);

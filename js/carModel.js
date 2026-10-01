@@ -21,14 +21,19 @@
 
   /** 车身主体：三段式车身 + 飞度式大座舱玻璃 + 车顶（两厢，短前悬长座舱）
    *  座舱段（z -0.35~0.70）地板下沉到 0.675 并铺深色内饰——低于方向盘轮缘最低点
-   *  0.682，驾驶员俯视看到的是深色舱内地板；旧版座舱段与车头/车尾连成整块箱体，
+   *  0.67，驾驶员俯视看到的是深色舱内地板；旧版座舱段与车头/车尾连成整块箱体，
    *  其浅色顶面（0.89）从方向盘四周一直铺到脚下，形成驾驶舱里的大片白色平面 */
   function buildBody(bodyM, glassM, roofLen, roofZ) {
     var g = new THREE.Group();
     var halfL = L / 2;
-    var bodyF = new THREE.Mesh(new THREE.BoxGeometry(W, 0.6, halfL - 0.7), bodyM);
-    bodyF.position.set(0, 0.59, (halfL + 0.7) / 2); bodyF.castShadow = true;
+    var bodyF = new THREE.Mesh(new THREE.BoxGeometry(W, 0.55, halfL - 0.7), bodyM);
+    bodyF.position.set(0, 0.565, (halfL + 0.7) / 2); bodyF.castShadow = true;
     g.add(bodyF);
+    // 引擎盖：自 cowl 向车头下倾 3.4°（顶面 0.905→0.85）——飞度短车头，座舱内越过
+    // 仪表台可见大片引擎盖；两侧各留 2cm 车身台阶，与真车 hood/fender 分缝一致
+    var hood = new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.07, 0.92), bodyM);
+    hood.position.set(0, 0.8425, 1.60); hood.rotation.x = 3.4 * Math.PI / 180; hood.castShadow = true;
+    g.add(hood);
     var bodyR = new THREE.Mesh(new THREE.BoxGeometry(W, 0.6, halfL - 0.35), bodyM);
     bodyR.position.set(0, 0.59, -(halfL + 0.35) / 2); bodyR.castShadow = true;
     g.add(bodyR);
