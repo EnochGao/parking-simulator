@@ -84,22 +84,32 @@
       } else {
         // 极速限制（前进 / 倒车各有限速）
         var maxAbs = drive > 0 ? P.maxFwd : P.maxRev;
+        // 本帧纵向加速度（默认前进的全局 accel）
+        var accel = P.accel;
         // 倒车蠕行：新按下的前 creepRampTime 秒钳在蠕行速度（轻点＝低速对位），
-        // 之后经既有加速度平滑拉起到倒车极速，无阶跃感
+        // 之后经渐入的加速度平滑拉起到倒车极速，无阶跃感
         if (drive < 0) {
+          accel = P.accelRev || P.accel;     // 倒车独立加速度（缺省回退全局值）
           var creepAbs = P.creep / 3.6;
           if (this._revHold == null) this._revHold = 0;
           // 已在蠕行速度以上后溜（松开后再按 S）：蠕行窗口视同已过，不叠加迟滞
           if (this._revHold < P.creepRampTime && -this.speed > creepAbs) this._revHold = P.creepRampTime;
           this._revHold += dt;
-          if (this._revHold < P.creepRampTime) maxAbs = Math.min(maxAbs, creepAbs);
+          if (this._revHold < P.creepRampTime) {
+            // 蠕行窗口内：钳极速 + 软接合（液力变矩器缓放，而非满加速度瞬间贴上蠕行速度）
+            maxAbs = Math.min(maxAbs, creepAbs);
+            accel = Math.min(accel, P.creepAccel || accel);
+          } else if (P.accelRampTime > 0) {
+            // 拉起段：加速度在 accelRampTime 内从 0 线性渐入，消除窗口结束处的加速度阶跃
+            accel *= clamp((this._revHold - P.creepRampTime) / P.accelRampTime, 0, 1);
+          }
         } else {
           this._revHold = 0;
         }
         // 钳制只限加速：未超速时正常拉起、到顶钳住；
         // 已超速（后溜中续按）保持滑行不回拍，避免速度被瞬间压回蠕行值的顿挫
         if (this.speed * drive <= maxAbs) {
-          this.speed += drive * P.accel * dt;
+          this.speed += drive * accel * dt;
           if (this.speed * drive > maxAbs) this.speed = maxAbs * drive;
         }
       }

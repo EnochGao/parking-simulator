@@ -172,7 +172,7 @@
     // 后视镜组随新车重建（旧车组已被释放）
     if (this.mirrorH) this.mirrorH.dispose();
     // 渲染镜面画面时隐藏内饰 → 镜中可见封闭车身侧面/后轮（舱玻璃保留，
-    // 左外镜相机在车外，镜中呈现带玻璃的完整车身；右外镜/车内镜相机在盒体
+    // 左右外镜相机均在车外，镜中呈现带玻璃的完整车身；车内镜相机在盒体
     // 内部，背面剔除后画面不受影响）；
     // 车内后视镜画面额外隐藏车顶板（否则镜中一大片是自家车顶+车尾）
     this.mirrorH = PS.Cockpit.buildMirrors(this.car.group, this.renderer, [this.cockpit.interior], [this.car.roof]);

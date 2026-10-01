@@ -61,8 +61,25 @@ section('物理模型');
   check('倒车蠕行：持续按住后加速到极速', Math.abs(Math.abs(c.speed) - CFG.PHYS.maxRev) < 0.02, 'v=' + c.speed.toFixed(3));
   for (i = 0; i < 40; i++) c.update(1 / 60, {});
   check('倒车蠕行：松开 S 刹停', c.speed === 0);
-  for (i = 0; i < 10; i++) c.update(1 / 60, { drive: -1 }); // 再次轻点 0.17s
+  for (i = 0; i < 30; i++) c.update(1 / 60, { drive: -1 }); // 再次轻点 0.5s（软接合下蠕行到位）
   check('倒车蠕行：再次轻点重新从蠕行开始', Math.abs(Math.abs(c.speed) - CFG.PHYS.creep / 3.6) < 0.02, 'v=' + c.speed.toFixed(3));
+  // 软接合：起步加速度受 creepAccel 限制（不再瞬间贴上蠕行速度），且拉起段加速度渐入无阶跃
+  c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
+  var prevV = 0, maxAcc = 0;
+  for (i = 0; i < 15; i++) {                       // 接合段 0.25s：加速度恒为 creepAccel
+    var v0 = c.speed;
+    c.update(1 / 60, { drive: -1 });
+    maxAcc = Math.max(maxAcc, Math.abs(c.speed - v0) * 60);
+  }
+  check('倒车软接合：起步加速度 ≈ creepAccel', approx(maxAcc, CFG.PHYS.creepAccel, 0.01), 'a=' + maxAcc.toFixed(3));
+  for (i = 0; i < 21; i++) c.update(1 / 60, { drive: -1 }); // 推进到蠕行窗口结束（累计 0.6s）
+  var accRamp = 0;
+  for (i = 0; i < 6; i++) {                        // 窗口结束后首 0.1s：加速度应明显低于满值（渐入中）
+    var v1 = c.speed;
+    c.update(1 / 60, { drive: -1 });
+    accRamp = Math.max(accRamp, Math.abs(c.speed - v1) * 60);
+  }
+  check('倒车拉起：加速度渐入低于满值', accRamp < CFG.PHYS.accelRev * 0.75, 'a=' + accRamp.toFixed(3));
 
   // 蠕行钳制只限加速不回拍：后溜中松开再按 S，速度不被瞬间压回蠕行值，而是从当前速度继续加速
   c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
