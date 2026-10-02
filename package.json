@@ -1,0 +1,12 @@
+{
+  "name": "parking-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "停车大师 ParkMaster · 新手司机停车训练模拟器（零依赖，Node/浏览器双端）",
+  "scripts": {
+    "start": "node tools/server.js 8137",
+    "test": "node tests/run_all.js",
+    "audit:mirror": "node tools/mirror_audit.js",
+    "solver": "node tools/solver.js"
+  }
+}

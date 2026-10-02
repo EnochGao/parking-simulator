@@ -24,8 +24,81 @@
     };
   }
 
-  /** 倒车雷达：车尾横向采样点到障碍物 OBB 的最近距离 */
-  function rearDistance(carPose, carCfg, obstacles) {
+  /** 倒车影像动态引导线（B1+B2）：
+   * - 动态弧线：按当前前轮角用自行车模型（与 physics.js 同式）从车尾中心积分预测 4.5m 轨迹，
+   *   打方向时实时弯曲——"方向盘↔车尾走向"的直接参照；
+   * - 车宽走廊线：车尾两角向后 2.5m 的白色直线，标示车身将通过的宽度；
+   * - 颜色随倒车雷达距离分级（与 HUD 雷达同一阈值）：≥range 绿 / urgent~range 黄 / <urgent 红；
+   * - 挂 layer 1：仅倒影相机（已 enable 该层）可见，主视图/后视镜画面不受影响。
+   * update(pose, carCfg, steer, radar) 每帧调用；雷达为 null（非 R 档）时弧线取绿色。 */
+  function createRevGuideLine(scene) {
+    var N = 25, LEN = 4.5, CORRIDOR = 2.5;
+    var RAD = (typeof PS !== 'undefined' && PS.RADAR) || { range: 2.5, urgent: 0.7 };
+
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    var mat = new THREE.LineBasicMaterial({ color: 0x35d06a, transparent: true, opacity: 0.95 });
+    var line = new THREE.Line(geo, mat);
+    line.frustumCulled = false;
+    line.layers.set(1);
+    line.visible = false;
+    scene.add(line);
+
+    var wGeo = new THREE.BufferGeometry();
+    wGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(4 * 3), 3));
+    var wMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+    var corridor = new THREE.Line(wGeo, wMat);
+    corridor.frustumCulled = false;
+    corridor.layers.set(1);
+    corridor.visible = false;
+    scene.add(corridor);
+
+    function update(pose, carCfg, steer, radar) {
+      /* 动态弧线：以后轴中心为参考点积分（与 physics.js 后轴参考一致，后轮纯滚动），
+       * 弧线画的是车尾中心（后轴沿航向后退 rearOH）的真实轨迹 */
+      var rearOH = carCfg.length - carCfg.frontOverhang - carCfg.wheelbase;
+      var dRear = carCfg.frontOverhang + carCfg.wheelbase - carCfg.length / 2;
+      var h = pose.heading;
+      var ax = pose.x - Math.sin(h) * dRear, az = pose.z - Math.cos(h) * dRear;
+      var pos = geo.attributes.position.array;
+      var ds = LEN / (N - 1);
+      for (var i = 0; i < N; i++) {
+        pos[i * 3] = ax - Math.sin(h) * rearOH;
+        pos[i * 3 + 1] = 0.07;
+        pos[i * 3 + 2] = az - Math.cos(h) * rearOH;
+        h += -Math.tan(steer) / carCfg.wheelbase * ds;
+        ax -= Math.sin(h) * ds;   // 倒退（v=-1）
+        az -= Math.cos(h) * ds;
+      }
+      geo.attributes.position.needsUpdate = true;
+      var col = radar == null ? 0x35d06a
+        : (radar < RAD.urgent ? 0xff4a30 : radar < RAD.range ? 0xffc93f : 0x35d06a);
+      if (mat.color.getHex() !== col) mat.color.setHex(col);
+
+      /* 车宽走廊线：车尾两角沿车尾方向向后 CORRIDOR 米 */
+      var c = Math.cos(pose.heading), s = Math.sin(pose.heading);
+      var bx = pose.x - s * (carCfg.length / 2), bz = pose.z - c * (carCfg.length / 2);
+      var rx = c * (carCfg.width / 2), rz = -s * (carCfg.width / 2);
+      var wp = wGeo.attributes.position.array;
+      wp[0] = bx + rx; wp[1] = 0.07; wp[2] = bz + rz;
+      wp[3] = bx + rx - s * CORRIDOR; wp[4] = 0.07; wp[5] = bz - c * CORRIDOR;
+      wp[6] = bx - rx; wp[7] = 0.07; wp[8] = bz - rz;
+      wp[9] = bx - rx - s * CORRIDOR; wp[10] = 0.07; wp[11] = bz - c * CORRIDOR;
+      wGeo.attributes.position.needsUpdate = true;
+    }
+
+    return {
+      line: line, corridor: corridor,
+      update: update,
+      setVisible: function (v) { line.visible = v; corridor.visible = v; },
+      dispose: function () {
+        scene.remove(line); scene.remove(corridor);
+        geo.dispose(); mat.dispose(); wGeo.dispose(); wMat.dispose();
+      }
+    };
+  }
+
+  /** 倒车雷达：车尾横向采样点到障碍物 OBB 的最近距离 */  function rearDistance(carPose, carCfg, obstacles) {
     var COL = PS.Collision;
     var h = carPose.heading, c = Math.cos(h), s = Math.sin(h);
     // 车尾中心（局部 z = -len/2）
@@ -121,5 +194,5 @@
     };
   }
 
-  return { createGuideLine: createGuideLine, rearDistance: rearDistance, createAudio: createAudio };
+  return { createGuideLine: createGuideLine, createRevGuideLine: createRevGuideLine, rearDistance: rearDistance, createAudio: createAudio };
 });

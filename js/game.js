@@ -20,6 +20,8 @@
     this.renderer.setSize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;  // 阴影按需更新（见 updateVisuals）：泊车大部分时间车辆静止，
+                                                 // 跳过每帧 2048² 阴影重绘；车辆位移/转向时置 needsUpdate
     container.appendChild(this.renderer.domElement);
 
     /* 场景 */
@@ -69,6 +71,7 @@
     this.beepTimer = 0;
     this.audio = PS.Assist.createAudio();
     this.hud = PS.Hud.createHud(container, PS.Levels);
+    this.revGuide = PS.Assist.createRevGuideLine(this.scene); // 倒车影像动态引导线（layer1，仅倒影相机可见）
     this.guide = null;
     this.acc = 0; // 固定步长累加器
     this.autopilotActive = false;
@@ -207,7 +210,8 @@
 
     this.time = 0; this.collisions = 0; this.wasColliding = false;
     this.lastColTime = -9;
-    this.stopTimer = 0; this.indicator.side = 0;
+    this.stopTimer = 0; this.indicator.side = 0; this.indicator.peak = null;
+    this._lastShadowPose = null;             // 新关卡车辆瞬移，强制刷新阴影
     this.usingTop = false; this.assist.top = false;
     this.hud.showHud(lv);
     this.state = 'briefing';
@@ -424,7 +428,7 @@
     var tipTxt = tips.length ? tips[Math.floor(this.time / 6) % tips.length] : '';
     this.hud.update({
       time: this.time, collisions: this.collisions, gear: this.carP.gear, speed: this.carP.speed,
-      radar: this.radar,
+      radar: this.radar, radarRange: RR,
       hint: this.mirrorMode ?
         '后视镜调节 [' + (this.mirrorSel === 0 ? '左外镜' : this.mirrorSel === 1 ? '右外镜' : '车内镜') + '] · A/D 左右 · W/S 上下 · 1/2/3 切换 · V 完成' :
         (!ev.completed && ev.posOffset < 3 && ev.inside ? '很好！停稳保持…' :
@@ -469,6 +473,19 @@
     var indColor = on ? this.car.indOn : this.car.indOff;
     this.car.indicators.l.material.color.setHex(this.indicator.side === 1 && on ? indColor : this.car.indOff);
     this.car.indicators.r.material.color.setHex(this.indicator.side === 2 && on ? indColor : this.car.indOff);
+    /* 转向灯自动回位熄灭：打过实方向（峰值>12°）后方向盘回到 ±4° 内，
+     * 与真实车拨杆回位一致——防止新手打完灯忘关 */
+    if (this.indicator.side) {
+      var steerAbs = Math.abs(this.carP.steer);
+      if (this.indicator.peak == null) this.indicator.peak = 0;
+      if (steerAbs > this.indicator.peak) this.indicator.peak = steerAbs;
+      if (this.indicator.peak > 12 * D2R && steerAbs < 4 * D2R) {
+        this.indicator.side = 0;
+        this.indicator.peak = null;
+      }
+    } else {
+      this.indicator.peak = null;
+    }
 
     /* 相机（含按住 Z/X 时向左/右转头的缓动；目标角对准两侧外后视镜） */
     var lookTarget = this.lookHeld === 1 ? 0.76 : (this.lookHeld === 2 ? -1.11 : 0);
@@ -483,6 +500,14 @@
     /* 太阳灯跟随 */
     this.sun.position.set(this.carP.x + 18, 30, this.carP.z + 12);
     this.sun.target.position.set(this.carP.x, 0, this.carP.z);
+    /* 阴影按需更新：车辆位移/转向超过阈值才重绘阴影贴图（静止泊车时整帧省掉一遍场景渲染） */
+    var sp = this.carP;
+    var last = this._lastShadowPose;
+    if (!last || Math.abs(sp.x - last.x) > 1e-4 || Math.abs(sp.z - last.z) > 1e-4 ||
+        Math.abs(sp.heading - last.h) > 1e-5) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this._lastShadowPose = { x: sp.x, z: sp.z, h: sp.heading };
+    }
 
     /* 俯视相机跟随（垂直视域固定，水平随窗口宽高比扩展，避免画面拉伸失真） */
     var topAspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
@@ -497,9 +522,19 @@
     /* 地库天顶组：俯视上帝视角时隐藏，否则天花板挡住整个俯视画面 */
     if (this.worldH && this.worldH.roof) this.worldH.roof.visible = !this.assist.top;
 
-    /* 倒车影像显隐（俯视上帝视角时隐藏，避免屏幕悬在车顶上方） */
+    /* 倒车影像显隐（俯视上帝视角时隐藏，避免屏幕悬在车顶上方）
+     * + 动态引导线：按当前前轮角预测车尾轨迹（assist.js），颜色随雷达距离分级 */
     if (this.mirrorH) {
-      this.mirrorH.revPlane.visible = this.assist.revCam && this.carP.gear === 'R' && !this.assist.top;
+      var revOn = this.assist.revCam && this.carP.gear === 'R' && !this.assist.top;
+      this.mirrorH.revPlane.visible = revOn;
+      if (this.revGuide) {
+        this.revGuide.setVisible(revOn);
+        if (revOn) {
+          this.revGuide.update(
+            { x: this.carP.x, z: this.carP.z, heading: this.carP.heading },
+            this.cfg.CAR, this.carP.steer, this.radar);
+        }
+      }
     }
   };
 

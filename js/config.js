@@ -16,6 +16,7 @@
       width: 1.694,         // 车宽 m
       height: 1.537,        // 车高 m（外观模型参考；碰撞 OBB 只用车长/车宽）
       wheelbase: 2.53,      // 轴距 m
+      frontOverhang: 0.84,  // 前悬 m（与 carModel.js/物理后轴参考共用；后悬=长-前悬-轴距≈0.74）
       trackF: 1.48,         // 前轮距 m
       trackR: 1.465,        // 后轮距 m
       tireR: 0.3015,        // 轮胎滚动半径 m（185/60 R15：直径≈603mm）

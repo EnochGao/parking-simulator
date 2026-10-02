@@ -18,7 +18,7 @@ body { font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; co
 .hud-stat { background: rgba(16,18,24,.72); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
 .hud-stat.warn b { color: #ff7a66; }
 .hud-bottom { position: absolute; bottom: 18px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.cluster { display: flex; align-items: center; gap: 18px; background: rgba(16,18,24,.8); border: 1px solid #33384280; border-radius: 16px; padding: 10px 22px; }
+.cluster { display: flex; align-items: center; gap: 18px; background: rgba(16,18,24,.42); border: 1px solid #33384260; border-radius: 16px; padding: 8px 18px; }
 .gear span { font-size: 34px; font-weight: 800; color: #6fd66f; }
 .gear span.r { color: #ff9d5c; }
 .speed b { font-size: 30px; font-weight: 700; }

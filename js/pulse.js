@@ -31,9 +31,17 @@
       st.v -= Math.sign(st.v) * Math.min(Math.abs(st.v) - P.creep, dv);
     }
 
-    st.h += st.v / (car ? car.wheelbase : P.wheelbase) * Math.tan(st.steer) * dt;
-    st.x += st.v * Math.sin(st.h) * dt;
-    st.z += st.v * Math.cos(st.h) * dt;
+    var h0 = st.h;
+    var wb = car ? car.wheelbase : P.wheelbase;
+    st.h += st.v / wb * Math.tan(st.steer) * dt;
+    // 后轴参考积分（与 physics.js 一致）：后轴沿新航向推进（后轮纯滚动无侧滑），
+    // 状态中的 x/z 仍为车几何中心（碰撞/评分/渲染锚点），由后轴沿航向前推 dRear
+    var dRear = car ? car.frontOverhang + car.wheelbase - car.length / 2 : 0;
+    var rx = st.x - Math.sin(h0) * dRear, rz = st.z - Math.cos(h0) * dRear;
+    rx += st.v * Math.sin(st.h) * dt;
+    rz += st.v * Math.cos(st.h) * dt;
+    st.x = rx + Math.sin(st.h) * dRear;
+    st.z = rz + Math.cos(st.h) * dRear;
   }
 
   /** 制动一步（换挡前刹停）：减速度 = brakeInput * brake */

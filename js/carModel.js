@@ -10,9 +10,10 @@
 
   /* 飞度几何（与 config.js CAR 保持一致；前悬0.84/后悬0.74，轮胎 185/60 R15） */
   var CAR = (typeof self !== 'undefined' && self.PS && self.PS.CAR) ||
-    { length: 4.109, width: 1.694, wheelbase: 2.53, trackF: 1.48, trackR: 1.465, tireR: 0.3015 };
+    { length: 4.109, width: 1.694, wheelbase: 2.53, trackF: 1.48, trackR: 1.465, tireR: 0.3015, frontOverhang: 0.84 };
   var L = CAR.length, W = CAR.width, WB = CAR.wheelbase;
-  var AXLE_F = L / 2 - 0.84;        // 前轴 z（前悬 0.84m）
+  var FRONT_OH = CAR.frontOverhang != null ? CAR.frontOverhang : 0.84;
+  var AXLE_F = L / 2 - FRONT_OH;    // 前轴 z（前悬 0.84m）
   var AXLE_R = AXLE_F - WB;         // 后轴 z（后悬 ≈0.74m）
   var HALF_F = CAR.trackF / 2, HALF_R = CAR.trackR / 2;
   var TIRE_R = CAR.tireR, TIRE_W = 0.185;

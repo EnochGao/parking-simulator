@@ -25,6 +25,10 @@
     this.steer = 0;          // 前轮转角 rad
     this.gear = 'D';         // 'D' | 'R'
     this.odometer = 0;       // 累计行驶里程（绝对值）
+    /* 后轴参考：真车低速运动学的正确参考点——后轮不偏转、不侧滑，瞬时转向中心
+     * 在后轴延长线上。x/z 仍存车几何中心（碰撞 OBB/渲染/评分锚点），由后轴位置
+     * 沿航向前推 dRear（中心→后轴距离）推导，保证刚体一致。 */
+    this._dRear = cfg.car.frontOverhang + cfg.car.wheelbase - cfg.car.length / 2;
   }
 
   CarPhysics.prototype.forward = function () {
@@ -121,12 +125,20 @@
       else this.speed -= Math.sign(this.speed) * dv1;
     }
 
-    // --- 运动学积分 ---
+    // --- 运动学积分（后轴参考，与真车一致） ---
+    // 偏航率 ω = v·tan(δ)/轴距 以后轴速度定义；后轴沿新航向推进（后轮纯滚动无侧滑），
+    // 车几何中心由后轴沿航向前推 _dRear——转陡弯时车中心带真实侧偏角、车尾真实外摆
     if (this.speed !== 0) {
+      var f0x = Math.sin(this.heading), f0z = Math.cos(this.heading);
+      var rx = this.x - f0x * this._dRear;
+      var rz = this.z - f0z * this._dRear;
       var dh = (this.speed / this.car.wheelbase) * Math.tan(this.steer) * dt;
       this.heading = wrapPi(this.heading + dh);
-      this.x += this.speed * Math.sin(this.heading) * dt;
-      this.z += this.speed * Math.cos(this.heading) * dt;
+      var f1x = Math.sin(this.heading), f1z = Math.cos(this.heading);
+      rx += this.speed * f1x * dt;
+      rz += this.speed * f1z * dt;
+      this.x = rx + f1x * this._dRear;
+      this.z = rz + f1z * this._dRear;
       this.odometer += Math.abs(this.speed) * dt;
     }
     return { speed: this.speed, steer: this.steer, gear: this.gear, heading: this.heading };

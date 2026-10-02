@@ -63,13 +63,16 @@ node tools/server.js 8137
 ## 测试（全场景覆盖）
 
 ```bash
-node tests/run_all.js     # 单元测试 + 关卡数据校验 + 全关卡自动驾驶回归
-node tools/solver.js      # （可选）重新求解各关标准答案路径
-node tools/server.js      # 启动后访问 ?selftest=all 运行浏览器端回归
+npm test                  # 单元测试 + 关卡数据校验 + 全关卡自动驾驶回归（node tests/run_all.js）
+npm run audit:mirror      # 后视镜/倒车影像几何审计（GB 15084 / UN R46 / FMVSS 111 对照，37 项）
+npm run solver            # （调物理参数后）重新求解各关标准答案路径
+npm start                 # 启动本地服务器（node tools/server.js 8137）
 ```
 
 URL 参数：`?level=lv03` 直达关卡；`?autotest=lv03` 观看标准答案演示；
-`?selftest=all` 浏览器回归（10/10 PASS 写入页面标题）；`?unlock=1` 解锁全部关卡。
+`?selftest=all` 浏览器全关回归；`?mirrortest=1` 后视镜/倒影渲染回读自测；
+`?cockpittest=1` 座舱转向联动自测（方向盘↔车轮↔车标）；`?unlock=1` 解锁全部关卡。
+浏览器自测结果写入页面标题（如 MIRROR CHECK PASS 27/27）与 window.__*_RESULTS。
 
 ## 架构
 

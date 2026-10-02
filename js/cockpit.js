@@ -375,6 +375,7 @@
     revCam.position.set(0, 1.0, -2.0);
     revCam.rotation.y = 0;           // 朝向车后方（-z）
     revCam.rotation.x = -28 * D2R;   // 向下俯视，以车后地面与障碍为主、顶部留地平线
+    revCam.layers.enable(1);         // layer1 = 倒影专属层：动态引导线（assist.js）只进倒影画面
     carGroup.add(revCam);
     var revRt = new THREE.WebGLRenderTarget(320, 180);
     var revMat = new THREE.MeshBasicMaterial({ map: revRt.texture, side: THREE.DoubleSide });

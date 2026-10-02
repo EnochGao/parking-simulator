@@ -55,29 +55,46 @@
       '<div class="flash" id="hud-flash"></div>';
     overlay.appendChild(hud);
     var $ = function (id) { return hud.querySelector('#' + id); };
+    /* 每帧差量更新：缓存节点引用与上次值，值不变不写 DOM（避免 60Hz 布局/绘制抖动） */
+    var nodeCache = {}, lastVals = {}, radarBars = null;
+    function node(id) {
+      if (!nodeCache[id]) nodeCache[id] = hud.querySelector('#' + id);
+      return nodeCache[id];
+    }
+    function setText(id, v) {
+      if (lastVals[id] === v) return;
+      lastVals[id] = v;
+      node(id).textContent = v;
+    }
 
     api.showHud = function (level) {
       hud.classList.remove('hidden');
-      $('hud-level-name').textContent = level.name;
-      $('hud-task-text').textContent = '目标：倒入白色标线车位';
-      $('hud-coll').textContent = '0';
-      $('hud-hint').textContent = level.tips ? level.tips[0] : '';
-      var ab = $('hud-audio');
+      lastVals = {};                       // 换关重置差量缓存，强制整帧重写
+      node('hud-level-name').textContent = level.name;
+      node('hud-task-text').textContent = '目标：倒入白色标线车位';
+      node('hud-coll').textContent = '0';
+      node('hud-hint').textContent = level.tips ? level.tips[0] : '';
+      var ab = node('hud-audio');
       ab.onclick = function () { api.onAudioToggle && api.onAudioToggle(); };
     };
-    api.setAudioOn = function (on) { $('hud-audio').textContent = on ? '🔊' : '🔇'; };
+    api.setAudioOn = function (on) { node('hud-audio').textContent = on ? '🔊' : '🔇'; };
     api.hideHud = function () { hud.classList.add('hidden'); };
     api.update = function (state) {
-      $('hud-time').textContent = state.time.toFixed(1);
-      $('hud-coll').textContent = state.collisions;
-      $('hud-gear').textContent = state.gear;
-      $('hud-gear').className = state.gear === 'R' ? 'r' : 'd';
-      $('hud-speed').textContent = Math.round(Math.abs(state.speed) * 3.6);
-      var bars = $('hud-radar').querySelectorAll('i');
-      var lv4 = state.radar != null ? Math.ceil(Math.max(0, 1 - state.radar / 2.5) * 4) : 0; // 与 game.js 雷达报警半径 2.5m 一致
-      for (var i = 0; i < 4; i++) bars[i].className = i < lv4 ? 'on' : '';
-      $('hud-hint').textContent = state.hint || '';
-      $('hud-assist').textContent = state.assistText || '';
+      setText('hud-time', state.time.toFixed(1));
+      setText('hud-coll', '' + state.collisions);
+      setText('hud-gear', state.gear);
+      var gcls = state.gear === 'R' ? 'r' : 'd';
+      if (lastVals.gcls !== gcls) { lastVals.gcls = gcls; node('hud-gear').className = gcls; }
+      setText('hud-speed', '' + Math.round(Math.abs(state.speed) * 3.6));
+      var range = state.radarRange || 2.5;                       // 报警半径与 game.js RADAR.range 同源
+      var lv4 = state.radar != null ? Math.ceil(Math.max(0, 1 - state.radar / range) * 4) : 0;
+      if (lastVals.radar !== lv4) {
+        lastVals.radar = lv4;
+        if (!radarBars) radarBars = node('hud-radar').querySelectorAll('i');
+        for (var i = 0; i < 4; i++) radarBars[i].className = i < lv4 ? 'on' : '';
+      }
+      setText('hud-hint', state.hint || '');
+      setText('hud-assist', state.assistText || '');
     };
     api.flash = function () {
       var f = $('hud-flash');

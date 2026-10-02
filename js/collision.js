@@ -7,7 +7,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
 
   function makeObb(x, z, angle, hw, hl) {
-    return { x: x, z: z, angle: angle, hw: hw, hl: hl };
+    // br = 包围圆半径：firstHit 用它做距离粗筛，SAT 前跳过远端障碍（每帧 ~60 次 × 全障碍）
+    return { x: x, z: z, angle: angle, hw: hw, hl: hl, br: Math.hypot(hw, hl) };
   }
 
   function carObb(x, z, heading, carCfg) {
@@ -77,10 +78,16 @@
     return true;
   }
 
-  /** 车辆是否与任一障碍物相交，返回相交的障碍物索引，无则 -1 */
+  /** 车辆是否与任一障碍物相交，返回相交的障碍物索引，无则 -1。
+   *  先做包围圆粗筛（缺 br 字段的 OBB 自动回退全量 SAT，NaN 比较为 false 不会误跳过） */
   function firstHit(carO, obstacles) {
+    var brA = carO.br != null ? carO.br : Math.hypot(carO.hw, carO.hl);
     for (var i = 0; i < obstacles.length; i++) {
-      if (obbOverlap(carO, obstacles[i])) return i;
+      var o = obstacles[i];
+      var brB = o.br != null ? o.br : Math.hypot(o.hw, o.hl);
+      var dx = carO.x - o.x, dz = carO.z - o.z, rr = brA + brB;
+      if (dx * dx + dz * dz > rr * rr) continue;
+      if (obbOverlap(carO, o)) return i;
     }
     return -1;
   }
