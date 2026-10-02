@@ -212,6 +212,7 @@
     this.lastColTime = -9;
     this.stopTimer = 0; this.indicator.side = 0; this.indicator.peak = null;
     this._lastShadowPose = null;             // 新关卡车辆瞬移，强制刷新阴影
+    this._mirrorsDirty = true;               // 新关卡强制渲染一帧镜面/倒影 RT
     this.usingTop = false; this.assist.top = false;
     this.hud.showHud(lv);
     this.state = 'briefing';
@@ -314,6 +315,7 @@
   };
 
   Game.prototype.stepPhysics = function () {
+    if (!this.carP) return;   // 防御：状态被外部注入（自测页手动 loadLevel 等）时 carP 可能未建
     if (this.autopilotActive && this.replay) {
       // 演示驾驶：与规划器同一脉冲积分，状态镜像到 carP 供碰撞/评分/HUD
       var s = this.replay(DT);
@@ -441,9 +443,26 @@
     if (!this.car) return;
     this.car.group.position.set(this.carP.x, 0, this.carP.z);
     this.car.group.rotation.y = this.carP.heading;
-    /* 前轮转向可视化 */
+    /* 前轮转向可视化：阿克曼几何——内侧轮转角大于外侧（真车转向梯形）。
+     * δ 为自行车模型轮角（两轮名义平均），瞬时半径 R=轴距/tan|δ|，
+     * 理想内外轮角 = atan(轴距/(R∓轮距/2))；取 60% 阿克曼系数折中观感（无轮 wells 建模） */
     var fw = this.carP.steer;
-    this.car.frontWheels.forEach(function (w) { w.rotation.y = fw; });
+    var fwAbs = Math.abs(fw);
+    if (fwAbs > 1e-4) {
+      var RTurn = this.cfg.CAR.wheelbase / Math.tan(fwAbs);
+      var tf2 = this.cfg.CAR.trackF / 2;
+      var aInner = Math.atan(this.cfg.CAR.wheelbase / Math.max(0.3, RTurn - tf2));
+      var aOuter = Math.atan(this.cfg.CAR.wheelbase / (RTurn + tf2));
+      var kAck = 0.6;
+      var angIn = fw + (Math.sign(fw) * aInner - fw) * kAck;
+      var angOut = fw + (Math.sign(fw) * aOuter - fw) * kAck;
+      var iIn = fw > 0 ? 1 : 0;                 // 内侧轮：左转=左轮（车左 = +trackF/2 侧）
+      this.car.frontWheels[iIn].rotation.y = angIn;
+      this.car.frontWheels[1 - iIn].rotation.y = angOut;
+    } else {
+      this.car.frontWheels[0].rotation.y = 0;
+      this.car.frontWheels[1].rotation.y = 0;
+    }
     /* 方向盘随转向输入旋转（传动比见 steerVisualRatio）。
      * 视觉层以 steerVisualRate 为转速上限平滑追踪目标角：前轮转向速率 55°/s×传动比 7.5
      * = 412°/s 的打轮速度超出真实手速，观感发飘；限速后方向盘以 ~300°/s 转动，
@@ -547,10 +566,16 @@
       this.car.cabin.visible = true;
       if (this.cockpit) this.cockpit.interior.visible = !this.assist.top;
     }
+    if (this.assist.top) this._mirrorsDirty = true;   // 俯视期间镜面不渲染，回驾驶座强制刷新
     if (this.mirrorH && this.car && !this.assist.top) {
-      // 倒影画面重绘与倒影屏显隐（updateVisuals）保持同一条件：R 挡且倒影开关开启
-      var revOn = this.assist.revCam && this.carP.gear === 'R';
-      this.mirrorH.render(this.renderer, this.scene, revOn);
+      // 镜面/倒影 RT 仅在驾驶态逐帧渲染；简报/暂停/结算/菜单态场景静止（遮罩 82% 遮挡），
+      // 保留最后一帧即可——入口/换关时由 _mirrorsDirty 强制渲染一帧，菜单态渲染开销 -80%
+      if (this.state === 'playing' || this._mirrorsDirty) {
+        // 倒影画面重绘与倒影屏显隐（updateVisuals）保持同一条件：R 挡且倒影开关开启
+        var revOn = this.assist.revCam && this.carP.gear === 'R';
+        this.mirrorH.render(this.renderer, this.scene, revOn);
+        this._mirrorsDirty = false;
+      }
     }
     this.renderer.render(this.scene, cam);
   };

@@ -46,12 +46,20 @@
       prev = wheel.rotation.z;
     }
     var expect = -CAR.maxSteer * ratio;
-    check('满舵左：前轮随动 +' + (CAR.maxSteer / D2R).toFixed(0) + '°',
-      frontWheels.every(function (w) { return Math.abs(w.rotation.y - CAR.maxSteer) < 1e-9; }), deg(frontWheels[0].rotation.y));
     check('满舵左：方向盘收敛到 -270°（传动比 7.5）', Math.abs(wheel.rotation.z - expect) < 1e-9, deg(wheel.rotation.z));
     check('限速：方向盘转速 ≤' + (cap / D2R).toFixed(0) + '°/s（真实打轮手速量级）',
       maxObs <= cap / D2R + 0.01, '峰值 ' + maxObs.toFixed(0) + '°/s');
     check('方向：左转时方向盘逆时针（rotation.z<0，轮缘顶部向驾驶员左侧）', wheel.rotation.z < 0);
+
+    /* ---- 阿克曼前轮：内轮角 > 名义轮角 > 外轮角（真车转向梯形，60% 系数） ---- */
+    var dDeg = CAR.maxSteer / D2R;
+    var a0 = frontWheels[0].rotation.y / D2R, a1 = frontWheels[1].rotation.y / D2R;
+    check('阿克曼：满舵内轮 > 名义 ' + dDeg.toFixed(0) + '° > 外轮',
+      Math.max(a0, a1) > dDeg && Math.min(a0, a1) < dDeg,
+      '内 ' + Math.max(a0, a1).toFixed(1) + '° / 外 ' + Math.min(a0, a1).toFixed(1) + '°');
+    check('阿克曼：两轮均朝转向侧（符号与 steer 一致）',
+      Math.sign(frontWheels[0].rotation.y) === Math.sign(g.carP.steer) &&
+      Math.sign(frontWheels[1].rotation.y) === Math.sign(g.carP.steer));
 
     /* ---- 中间档线性：1/3 舵 → 收敛到 -90° ---- */
     g.carP.steer = CAR.maxSteer / 3;

@@ -65,6 +65,7 @@ node tools/server.js 8137
 ```bash
 npm test                  # 单元测试 + 关卡数据校验 + 全关卡自动驾驶回归（node tests/run_all.js）
 npm run audit:mirror      # 后视镜/倒车影像几何审计（GB 15084 / UN R46 / FMVSS 111 对照，37 项）
+npm run turn              # 拐弯真实性数值检查（后轴参考自行车模型 vs 真车几何对照）
 npm run solver            # （调物理参数后）重新求解各关标准答案路径
 npm start                 # 启动本地服务器（node tools/server.js 8137）
 ```

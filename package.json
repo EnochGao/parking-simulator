@@ -7,6 +7,7 @@
     "start": "node tools/server.js 8137",
     "test": "node tests/run_all.js",
     "audit:mirror": "node tools/mirror_audit.js",
+    "turn": "node tools/turn_check.js",
     "solver": "node tools/solver.js"
   }
 }
