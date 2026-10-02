@@ -293,6 +293,41 @@ section('手柄集成');
     (r.stdout || '').split('\n').filter(function (l) { return l.indexOf('✗') >= 0; }).join(' | '));
 })();
 
+/* ---------------- 8. 座舱转向标定（方向盘 ↔ 车轮 ↔ 车标） ---------------- */
+section('座舱转向标定');
+(function () {
+  var CAR = CFG.CAR;
+  // 真实驾驶柱标定：满舵 36° 对应方向盘 ±270°（视觉传动比 270/36）
+  check('转向标定：满舵对应方向盘 ±270°', Math.abs(CAR.steerVisualRatio * CAR.maxSteer - 270 * CFG.D2R) < 1e-9,
+    ((CAR.steerVisualRatio * CAR.maxSteer) / CFG.D2R).toFixed(1) + '°');
+  // 座舱可无头构建（gauge 画布有 document 守卫），校验方向盘组/车标几何
+  global.self = global; global.window = global;
+  if (!global.THREE) global.THREE = require(path.join(__dirname, '..', 'vendor', 'three.min.js'));
+  var PS_ = global.PS = global.PS || {};
+  PS_.VIEW = CFG.VIEW; PS_.CAR = CFG.CAR;
+  PS_.Cockpit = require(path.join(__dirname, '..', 'js', 'cockpit.js'));
+  var carGroup = new global.THREE.Group();
+  var cockpit = PS_.Cockpit.buildInterior(carGroup);
+  var wheel = cockpit.wheelGroup;
+  check('座舱：方向盘组默认回正（rotation.z=0）', wheel.rotation.z === 0);
+  check('座舱：方向盘安装倾角 -24°（真实驾驶柱）', Math.abs(wheel.rotation.x + 24 * CFG.D2R) < 1e-9,
+    (wheel.rotation.x / CFG.D2R).toFixed(1) + '°');
+  var emblem = wheel.getObjectByName('emblem');
+  check('座舱：车标挂在方向盘组上（随盘转动）', !!emblem && emblem.parent === wheel);
+  var minZ = 0;
+  if (emblem) emblem.traverse(function (o) {
+    if (o.isMesh) {
+      var d = (o.geometry.parameters && o.geometry.parameters.depth) || 0;
+      minZ = Math.min(minZ, o.position.z - d / 2);
+    }
+  });
+  check('座舱：车标凸出在驾驶员侧（局部 -z，旧贴片仅 6mm 难辨转动）', minZ < -0.02, 'minZ=' + minZ.toFixed(4));
+  var stripe = wheel.getObjectByName('centerStripe');
+  check('座舱：12 点回正标线挂在方向盘组顶部', !!stripe && stripe.parent === wheel &&
+    Math.abs(stripe.position.y - 0.175) < 1e-9 && Math.abs(stripe.position.x) < 1e-9,
+    stripe ? ('y=' + stripe.position.y.toFixed(3)) : '缺失');
+})();
+
 /* ---------------- 汇总 ---------------- */
 console.log('\n========== 测试结果 ==========');
 console.log('通过: ' + passed + '  失败: ' + failed);

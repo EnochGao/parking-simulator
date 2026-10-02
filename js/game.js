@@ -440,9 +440,17 @@
     /* 前轮转向可视化 */
     var fw = this.carP.steer;
     this.car.frontWheels.forEach(function (w) { w.rotation.y = fw; });
-    /* 方向盘随转向输入旋转（传动比见 steerVisualRatio） */
+    /* 方向盘随转向输入旋转（传动比见 steerVisualRatio）。
+     * 视觉层以 steerVisualRate 为转速上限平滑追踪目标角：前轮转向速率 55°/s×传动比 7.5
+     * = 412°/s 的打轮速度超出真实手速，观感发飘；限速后方向盘以 ~300°/s 转动，
+     * 稳态（保持转向/回正到位）仍与目标角完全一致——车轮与方向盘联动不变 */
     if (this.cockpit) {
-      this.cockpit.wheelGroup.rotation.z = -fw * (this.cfg.CAR.steerVisualRatio || 8);
+      var target = -fw * (this.cfg.CAR.steerVisualRatio || 8);
+      var wheel = this.cockpit.wheelGroup;
+      var d = target - wheel.rotation.z;
+      var maxStep = (this.cfg.CAR.steerVisualRate || 300 * D2R) * elapsed;
+      if (Math.abs(d) <= maxStep) wheel.rotation.z = target;
+      else wheel.rotation.z += (d > 0 ? 1 : -1) * maxStep;
     }
     /* 刹车灯：手刹 / 松开油门滑行刹车中 / 前进中挂倒车减速（键盘与手柄统一看 input.drive） */
     var spd = this.carP ? this.carP.speed : 0;
@@ -505,9 +513,37 @@
       if (this.cockpit) this.cockpit.interior.visible = !this.assist.top;
     }
     if (this.mirrorH && this.car && !this.assist.top) {
-      this.mirrorH.render(this.renderer, this.scene);
+      // 倒影画面重绘与倒影屏显隐（updateVisuals）保持同一条件：R 挡且倒影开关开启
+      var revOn = this.assist.revCam && this.carP.gear === 'R';
+      this.mirrorH.render(this.renderer, this.scene, revOn);
     }
     this.renderer.render(this.scene, cam);
+  };
+
+  /* ---------- 后视镜/倒影渲染回读自测（?mirrortest=1） ---------- */
+  Game.prototype.selftestMirrors = function () {
+    var res = this.PS.MirrorCheck.run(this);
+    var lines = res.report.map(function (r) { return [r.pass, r.name + (r.detail ? ' — ' + r.detail : '')]; });
+    var passN = lines.filter(function (l) { return l[0]; }).length;
+    document.title = (res.allPass ? 'MIRROR CHECK PASS ' : 'MIRROR CHECK FAIL ') + passN + '/' + lines.length;
+    window.__MIRROR_RESULTS = { allPass: res.allPass, report: res.report };
+    this.hud.showSelftest(lines, res.allPass);
+    this.state = 'selftest';
+    this.audio.chime(res.allPass);
+    return window.__MIRROR_RESULTS;
+  };
+
+  /* ---------- 座舱转向联动自测（?cockpittest=1） ---------- */
+  Game.prototype.selftestCockpit = function () {
+    var res = this.PS.CockpitCheck.run(this);
+    var lines = res.report.map(function (r) { return [r.pass, r.name + (r.detail ? ' — ' + r.detail : '')]; });
+    var passN = lines.filter(function (l) { return l[0]; }).length;
+    document.title = (res.allPass ? 'COCKPIT CHECK PASS ' : 'COCKPIT CHECK FAIL ') + passN + '/' + lines.length;
+    window.__COCKPIT_RESULTS = { allPass: res.allPass, report: res.report };
+    this.hud.showSelftest(lines, res.allPass);
+    this.state = 'selftest';
+    this.audio.chime(res.allPass);
+    return window.__COCKPIT_RESULTS;
   };
 
   /* ---------- selftest（浏览器端全关卡回归） ---------- */

@@ -164,10 +164,40 @@
     });
     var hub = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.095, 0.035), dark(0x2a2d33));
     wheelGroup.add(hub);
-    var emblem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.032, 0.006),
-      new THREE.MeshLambertMaterial({ color: 0xb8bfc7 }));
-    emblem.position.set(0, 0, -0.0205);   // 轮毂驾驶员侧面：H 标点缀
+    // 本田车标：镀铬 H + 上宽下窄梯形边框（真实 GR9 款式）。旧版是一块贴在毂面上的
+    // 小银片，打方向时读不出转动角度；3D 凸出 14mm 随光转动有明暗，非对称梯形框
+    // 打破 180° 对称——回正时车标端正、满舵时侧倒，一眼可辨。局部 -z 朝驾驶员，
+    // 随 wheelGroup 一起转动（放大比 steerVisualRatio 见 config）
+    var chromeM = new THREE.MeshLambertMaterial({ color: 0xd7dce2, emissive: 0x16191d });
+    var emblem = new THREE.Group();
+    emblem.name = 'emblem';
+    (function () {
+      var s = new THREE.Shape();          // 梯形框：上宽 66、下宽 48、高 60、框宽 6mm
+      s.moveTo(-0.033, 0.030); s.lineTo(0.033, 0.030);
+      s.lineTo(0.024, -0.030); s.lineTo(-0.024, -0.030); s.closePath();
+      var hole = new THREE.Path();
+      hole.moveTo(-0.027, 0.024); hole.lineTo(0.027, 0.024);
+      hole.lineTo(0.019, -0.024); hole.lineTo(-0.019, -0.024); hole.closePath();
+      s.holes.push(hole);
+      var bezel = new THREE.Mesh(new THREE.ShapeGeometry(s), chromeM);
+      bezel.position.z = -0.0195;         // 浮在毂面（局部 -0.0175）外 2mm
+      emblem.add(bezel);
+      var barG = new THREE.BoxGeometry(0.013, 0.046, 0.014);   // H 双竖杠
+      var bl = new THREE.Mesh(barG, chromeM); bl.position.set(-0.0175, 0, -0.0245); emblem.add(bl);
+      var br = new THREE.Mesh(barG, chromeM); br.position.set(0.0175, 0, -0.0245); emblem.add(br);
+      var cross = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.014), chromeM);
+      cross.position.set(0, 0, -0.0245); emblem.add(cross);    // H 横杠
+    })();
     wheelGroup.add(emblem);
+
+    // 12 点回正标记：轮缘正上方一段黄色标线（赛车方向盘惯例）。轮毂车标在驾驶员
+    // 视野里位置偏低且可能被 HUD 遮挡；轮缘顶部标线位于画面中部恒可见——
+    // 回正时恒在正上方，满舵 ±270° 时随盘摆到侧下方，"是否回正"一眼可辨
+    var stripe = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.026, 0.008),
+      new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x2e2600 }));
+    stripe.position.set(0, 0.175, -0.019);
+    stripe.name = 'centerStripe';
+    wheelGroup.add(stripe);
     interior.add(wheelGroup);
 
     // 转向柱护罩 + 灯光/雨刮拨杆（方向盘与仪表台之间的真实连接件）
@@ -259,8 +289,12 @@
      *  镜面与外壳同组，adjYaw/adjPitch 为驾驶员调节量（V 调节模式）：
      *  玻璃组与镜相机一起偏转 —— 相机偏转即改变镜中所见，与真实调后视镜一致。 */
     function makeMirror(pos, camPos, yawDeg, camYawDeg, size, withShell, fov, camPitchDeg, hideExtra, tint) {
-      var rt = new THREE.WebGLRenderTarget(384, 216);
-      var cam = new THREE.PerspectiveCamera(fov, 384 / 216, 0.3, 160);
+      // 渲染目标与相机宽高比一律取镜面自身宽高比：车内镜是 3.2:1 的扁长镜片，
+      // 若沿用 16:9 渲染目标会把画面水平拉伸约 1.8 倍，镜中形状/距离与其它视野不一致
+      var aspect = size[0] / size[1];
+      var rtW = 384, rtH = Math.max(2, Math.round(rtW / aspect));
+      var rt = new THREE.WebGLRenderTarget(rtW, rtH);
+      var cam = new THREE.PerspectiveCamera(fov, aspect, 0.3, 160);
       cam.position.set(camPos.x, camPos.y, camPos.z);
       cam.rotation.set((camPitchDeg || 0) * D2R, camYawDeg * D2R, 0);
       carGroup.add(cam);
@@ -306,7 +340,8 @@
     // 车内后视镜：玻璃 0.26×0.082（GB 15084 Ⅰ类 ≥120×40mm 之上，真镜观感），
     // 吊在风挡顶部正中（x 0.10，真车安装位，位于驾驶员前方偏右），
     // 玻璃顶边 1.346 与吊杆底端衔接；从眼位仰角约 14.8°——画面最上沿区域；
-    // yaw 173°、相机正对车后、仰角 +2°、防眩目 tint、渲染时隐藏车顶板
+    // yaw 173°、相机正对车后、仰角 +2°、防眩目 tint、渲染时隐藏车顶板；
+    // 相机按镜片 3.2:1 宽高比渲染 → 扁长镜片呈现宽幅后窗视野（垂直视场仍为 inMirrorFov）
     var intMirror = makeMirror({ x: 0.10, y: 1.305, z: 0.60 }, { x: 0.10, y: 1.305, z: 0.60 }, 173, 0, [0.26, 0.082], false, INT_FOV, 2, interiorHideExtra, 0xa9bac9);
 
     // 镜壳 + 后窗轮廓遮罩都挂到转动组（grp）里，与镜片同轴：
@@ -333,11 +368,13 @@
       hideInMirror.push(mask);
     })();
 
-    // 倒车影像相机（车尾摄像头）：朝车后方（-z）广角俯视地面
+    // 倒车影像相机（车尾摄像头）：朝车后方（-z）广角俯视地面。
+    // 俯角 28° + 垂直视场 100°：画面下缘俯到 -78°，车尾后 0.3m 的近地可见
+    // （FMVSS 111 惯例），上缘留 22° 地平线/天空
     var revCam = new THREE.PerspectiveCamera(VIEW.revFov, 16 / 9, 0.4, 60);
     revCam.position.set(0, 1.0, -2.0);
     revCam.rotation.y = 0;           // 朝向车后方（-z）
-    revCam.rotation.x = -25 * D2R;   // 向下俯视，以车后地面与障碍为主、顶部留少量地平线
+    revCam.rotation.x = -28 * D2R;   // 向下俯视，以车后地面与障碍为主、顶部留地平线
     carGroup.add(revCam);
     var revRt = new THREE.WebGLRenderTarget(320, 180);
     var revMat = new THREE.MeshBasicMaterial({ map: revRt.texture, side: THREE.DoubleSide });
@@ -349,11 +386,14 @@
     // 水平镜像：呈现"回头看"的直觉视图（画面右＝车右后方），与真实倒车影像一致
     revPlane.scale.x = -1;
 
-    function render(renderer, scene) {
-      // 倒车影像：整车隐藏，画面干净
-      carGroup.visible = false;
-      renderer.setRenderTarget(revRt);
-      renderer.render(scene, revCam);
+    function render(renderer, scene, revOn) {
+      // 倒车影像：整车隐藏，画面干净；重绘条件与屏体显隐保持同一判断
+      //（revOn 由 game.js 按 assist.revCam && gear==='R' && !assist.top 传入）
+      if (revOn !== false) {
+        carGroup.visible = false;
+        renderer.setRenderTarget(revRt);
+        renderer.render(scene, revCam);
+      }
       // 后视镜：隐藏内饰，保留外观与舱玻璃 → 镜中可见封闭车身侧面与后轮（真实参照）
       var saved = [];
       for (var k = 0; k < hideInMirror.length; k++) {

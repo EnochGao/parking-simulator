@@ -136,11 +136,11 @@
     bl.position.set(-0.58, 0.75, -L / 2 - 0.01); g.add(bl);
     var br = bl.clone(); br.position.x = 0.58; g.add(br);
 
-    // 转向灯
+    // 转向灯（车身左侧为 +x：与驾驶位 seatX=0.36、左外后视镜 +0.99 同侧）
     var indL = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.18), new THREE.MeshLambertMaterial({ color: 0x7a5a00 }));
-    indL.position.set(-0.84, 0.72, 1.85); g.add(indL);
+    indL.position.set(0.84, 0.72, 1.85); g.add(indL);
     var indR = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.18), new THREE.MeshLambertMaterial({ color: 0x7a5a00 }));
-    indR.position.set(0.84, 0.72, 1.85); g.add(indR);
+    indR.position.set(-0.84, 0.72, 1.85); g.add(indR);
 
     return {
       group: g,

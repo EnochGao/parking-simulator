@@ -22,6 +22,8 @@
       maxSteer: 36 * D2R,   // 前轮最大转角：由最小转弯半径 4.9m 反推
                             // R=√((L/tanδ+trackF/2)²+L²)=4.9 → δ≈36.2°，取整 36°
       steerVisualRatio: 270 / 36, // 方向盘视觉转角/前轮转角（满舵 ±270°）
+      steerVisualRate: 300 * D2R, // 方向盘视觉转速上限 rad/s（≈真实打轮手速量级；前轮 55°/s×7.5=412°/s
+                                  // 过快，视觉层以该上限平滑追踪目标角，稳态仍与车轮严格联动）
       seatX: 0.36, seatY: 1.16, seatZ: 0.05 // 驾驶员眼位(车体局部坐标, 左舵)
     },
     PHYS: {
@@ -30,8 +32,8 @@
       accel: 3.0,           // 油门加速度
       brake: 6.0,           // 制动减速度
       drag: 0.6,            // 自然阻力
-      steerRate: 55 * D2R,  // 前轮转向速率 rad/s
-      centerRate: 70 * D2R, // 回正速率
+      steerRate: 55 * D2R,  // 前轮转向速率 rad/s（演示/引导路径经 pulse.js 与此耦合，改值需重算 solver）
+      centerRate: 70 * D2R, // 回正速率（同上）
       handbrakeDecel: 9,
       bounceFactor: 0.3,
       stoppedEps: 0.04,
@@ -65,8 +67,10 @@
       stopTime: 1.5,        // 停稳判定时长
       maxCollisions: 5      // 强制失败碰撞数
     },
-    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 80, near: 0.12, far: 220 }
-    // fov: 主相机垂直视场角（72° 接近真实车内透视）；mirrorFov/inMirrorFov: 外/内后视镜相机视场，
-    // 内镜收窄对准后窗视野（减少自家车尾入镜）；revFov: 倒影广角
+    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 100, near: 0.12, far: 220 }
+    // fov: 主相机垂直视场角（72° 接近真实车内透视）；mirrorFov/inMirrorFov/revFov 统一为
+    // "垂直视场角"约定，渲染宽高比取各自镜面/屏面的实际宽高比（见 cockpit.js），
+    // 内镜 3.2:1 扁长镜片因此呈现宽幅后窗视野而非水平拉伸画面；
+    // revFov 100（水平≈130°）：对标真实倒车影像的广角（130°+），保证车尾后 0.3m 起近地可见
   };
 });
