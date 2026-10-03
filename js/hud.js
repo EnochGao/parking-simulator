@@ -1,18 +1,10 @@
-/* DOM UI：主菜单 / 选关 / 任务简报 / HUD / 暂停 / 结算 */
+/* DOM UI：主菜单 / 选关 / 任务简报 / HUD / 暂停 / 结算
+ * 纯视图层：只接收算好的数据并渲染，不做任何读写档（持久化在 js/progress.js） */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.PS = root.PS || {}; root.PS.Hud = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
-
-  var STORAGE_KEY = 'parkmaster_v1';
-  function loadProgress() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { levels: {} }; }
-    catch (e) { return { levels: {} }; }
-  }
-  function saveProgress(p) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch (e) {}
-  }
 
   function stars(n) {
     var s = '';
@@ -27,7 +19,7 @@
     return e;
   }
 
-  function createHud(root, LVL) {
+  function createHud(root) {
     var api = {};
     var overlay = el('div', 'hud-root');
     root.appendChild(overlay);
@@ -140,23 +132,18 @@
       api.showScreen(box);
     };
 
-    /* 选关 */
-    api.showLevelSelect = function (onPick, onBack) {
-      var progress = loadProgress();
+    /* 选关。items: [{lv, unlocked, stars, best}]（由 progress.unlockMap 预计算） */
+    api.showLevelSelect = function (items, onPick, onBack) {
       var box = el('div', 'menu-box wide');
       box.appendChild(el('h2', '', '选择关卡'));
       var grid = el('div', 'level-grid');
-      var unlockedAll = /[?&]unlock=1/.test(location.search);
-      var prevDone = true;
-      LVL.LEVELS.forEach(function (lv) {
-        var rec = progress.levels[lv.id];
-        var unlocked = unlockedAll || prevDone;
-        prevDone = prevDone && rec && rec.stars > 0;
+      items.forEach(function (it) {
+        var lv = it.lv, unlocked = it.unlocked;
         var card = el('div', 'level-card' + (unlocked ? '' : ' locked'));
         card.innerHTML =
           '<div class="lc-head">' + lv.id.replace('lv', '') + '</div>' +
           '<div class="lc-name">' + lv.name + '</div>' +
-          '<div class="lc-stars">' + (rec ? stars(rec.stars) : '☆☆☆') + '</div>' +
+          '<div class="lc-stars">' + (it.stars ? stars(it.stars) : '☆☆☆') + '</div>' +
           '<div class="lc-diff">' + '▪'.repeat(lv.diff) + '</div>' +
           (unlocked ? '' : '<div class="lc-lock">🔒 通关上一关解锁</div>');
         if (unlocked) card.onclick = function () { onPick(lv); };
@@ -189,15 +176,8 @@
       api.showScreen(box);
     };
 
-    /* 结算 */
+    /* 结算。落档由调用方（game.js → progress.record）完成，这里只展示 */
     api.showResult = function (level, result, onRetry, onNext, onMenu, hasNext) {
-      var progress = loadProgress();
-      var rec = progress.levels[level.id] || { stars: 0, best: 0 };
-      if (result.stars > rec.stars) rec.stars = result.stars;
-      if (result.score > (rec.best || 0)) rec.best = result.score;
-      progress.levels[level.id] = rec;
-      saveProgress(progress);
-
       var pass = result.stars > 0;
       var box = el('div', 'menu-box result');
       box.appendChild(el('div', 'result-stars ' + (pass ? 'win' : 'lose'), stars(result.stars)));
@@ -269,5 +249,5 @@
     return api;
   }
 
-  return { createHud: createHud, loadProgress: loadProgress, saveProgress: saveProgress };
+  return { createHud: createHud };
 });

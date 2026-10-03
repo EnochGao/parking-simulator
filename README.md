@@ -77,7 +77,20 @@ URL 参数：`?level=lv03` 直达关卡；`?autotest=lv03` 观看标准答案演
 
 ## 架构
 
-纯静态站点（零构建、零外部请求）。核心算法（物理/碰撞/评分/规划执行）为 Node/浏览器
-双端同构模块，`tests/run_all.js` 与浏览器 `?selftest=all` 运行同一套回归。
+纯静态站点（零构建、零外部请求）。核心算法（物理/碰撞/评分/一局模拟/规划执行）为
+Node/浏览器双端同构模块，`tests/run_all.js` 与浏览器 `?selftest=all` 运行同一套回归。
+
+分层（各模块单一职责，壳只做编排）：
+
+| 层 | 模块 | 说明 |
+|---|---|---|
+| 规则 | `sim.js` | 一局的步进/碰撞计次/评分/完成/失败——游戏内与无头回归共用同一实现 |
+| 物理 | `physics.js` / `collision.js` / `scoring.js` / `pulse.js` | 运动学、OBB+SAT、评分、脉冲积分 |
+| 数据 | `levels.js` / `progress.js` | 关卡数据；进度与存档（解锁链/续玩/落档） |
+| 输入 | `input.js` / `gamepad.js` | 可替换输入源（键盘+手柄合并，支持录像/回放）与手柄轮询 |
+| 表现 | `carRig.js` / `cockpit.js` / `carModel.js` / `world.js` / `assist.js` / `hud.js` | 整车装配与单车表现、座舱、场景、辅助、纯视图 UI |
+| 壳 | `game.js` / `main.js` | 渲染器/主循环/状态机/界面流转 |
+
+新增玩法（如剧情模式、对战）以"换输入源 + 换规则参数 + 多建一台 rig"接入，无需改动壳层。
 
 设计文档见 [docs/DESIGN.md](docs/DESIGN.md)。

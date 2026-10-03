@@ -186,16 +186,22 @@ Gamepad API，无需任何驱动或授权弹窗），进入游戏自动生效；
 │  ├─ physics.js   自行车模型、前后油门、档位自动切换、转向速率 [Node 可测]
 │  ├─ collision.js OBB + SAT、车辆四角                [Node 可测]
 │  ├─ scoring.js   完成判定与评分                     [Node 可测]
+│  ├─ pulse.js     脉冲运动积分（规划器/演示重放唯一积分源）[Node 可测]
+│  ├─ sim.js       一局模拟：步进/碰撞计次/评分/完成/失败判定
+│  │               ——游戏主循环与无头回归共用的唯一权威实现 [Node 可测]
 │  ├─ levels.js    10 关数据 + 演示答案脚本            [Node 可测]
-│  ├─ autopilot.js 演示脚本执行器（游戏内教学/回归共用）[Node 可测]
+│  ├─ autopilot.js 演示脚本执行器（按控制段推进 + sim 规则步）[Node 可测]
+│  ├─ progress.js  进度与存档（读档归一/解锁链/续玩/落档，storage 可注入）[Node 可测]
+│  ├─ input.js     驾驶输入源（键盘+手柄合并；录像/回放可替换）[Node 可测]
 │  ├─ textures.js  程序化贴图（柏油/砖墙/窗户…零外部资源）
 │  ├─ world.js     关卡数据 → 3D 场景 + 碰撞体（单一数据源）
 │  ├─ carModel.js  低多边形车辆外观
 │  ├─ cockpit.js   驾驶舱 + 三镜渲染 + 倒车影像相机
+│  ├─ carRig.js    整车装配（模型/座舱/镜组的建/用/释 + 单车表现同步）
 │  ├─ assist.js    引导线/俯视图/雷达/声音
-│  ├─ hud.js       DOM UI（菜单/选关/HUD/结算/暂停）
+│  ├─ hud.js       DOM UI 纯视图（菜单/选关/HUD/结算/暂停，不做持久化）
 │  ├─ gamepad.js   手柄：标准布局轮询/驾驶合并/菜单导航/震动 [纯函数 Node 可测]
-│  ├─ game.js      状态机与主循环
+│  ├─ game.js      游戏主壳：渲染器/主循环/状态机/界面流转（规则与数据全部下沉）
 │  └─ main.js      引导（URL 参数：selftest / autotest / unlock）
 └─ tests/            Node 测试（无需浏览器）
    ├─ run_all.js     单元 + 关卡数据校验 + 自动驾驶回归 + 手柄集成

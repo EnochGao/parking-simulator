@@ -148,15 +148,20 @@
     return Math.abs(this.speed) < this.phys.stoppedEps;
   };
 
-  /** 碰撞反弹：速度衰减并反向 */
+  /** 碰撞反弹：速度衰减并反向（纯函数，sim/无头回归与 CarPhysics 共用同一公式） */
+  function bounceSpeed(v, phys) {
+    var out = -v * phys.bounceFactor;
+    return Math.abs(out) < 0.25 ? 0 : out;
+  }
+
   CarPhysics.prototype.bounce = function () {
-    this.speed = -this.speed * this.phys.bounceFactor;
-    if (Math.abs(this.speed) < 0.25) this.speed = 0;
+    this.speed = bounceSpeed(this.speed, this.phys);
   };
 
   return {
     CarPhysics: CarPhysics,
     clamp: clamp,
-    wrapPi: wrapPi
+    wrapPi: wrapPi,
+    bounceSpeed: bounceSpeed
   };
 });

@@ -1,21 +1,19 @@
 /* 标准答案执行器：重放规划器（tools/solver.js）生成的控制段
  * 控制段 = { g:'D'|'R', sf:-1..1(转向), dur:秒 }
  * 运动积分调用 js/pulse.js（与规划器同一代码）——"规划即所行"。
- * 游戏内"教学演示/引导线数据源"与 Node 无头回归共用同一实现。 */
+ * 一局规则（碰撞/计次/评分/完成/失败）走 js/sim.js，与游戏内主循环同一实现；
+ * 本模块只负责"按控制段推进 + 超时/卡死看护 + 结果采集"。 */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.PS = root.PS || {}; root.PS.Autopilot = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
-  var CFG_, COL, SCO, LVL, PULSE;
+  var CFG_, SIM;
   function deps() {
     if (typeof module === 'object' && module.exports) {
-      CFG_ = require('./config.js'); COL = require('./collision.js');
-      SCO = require('./scoring.js'); LVL = require('./levels.js');
-      PULSE = require('./pulse.js');
+      CFG_ = require('./config.js'); SIM = require('./sim.js');
     } else {
-      CFG_ = window.PS; COL = window.PS.Collision; SCO = window.PS.Scoring;
-      LVL = window.PS.Levels; PULSE = window.PS.Pulse;
+      CFG_ = window.PS; SIM = window.PS.Sim;
     }
   }
 
@@ -24,6 +22,9 @@
    * 游戏内演示驾驶与无头回归共用，保证一致。
    */
   function createReplay(segs, dt, startPose) {
+    var PULSE;
+    if (typeof module === 'object' && module.exports) PULSE = require('./pulse.js');
+    else PULSE = window.PS.Pulse;
     var st = { x: startPose.x, z: startPose.z, h: startPose.h, v: 0, steer: 0, gear: segs[0].g };
     var segIdx = 0, stepLeft = Math.round(segs[0].dur / dt), segsDone = false;
     function step(dt2) {
@@ -46,6 +47,18 @@
     return step;
   }
 
+  /* 脉冲状态 {x,z,h,v} → sim 期望的 {x,z,heading,speed} 只读写视图（零拷贝） */
+  function simView(st) {
+    var view = {};
+    Object.defineProperty(view, 'x', { get: function () { return st.x; }, set: function (v) { st.x = v; } });
+    Object.defineProperty(view, 'z', { get: function () { return st.z; }, set: function (v) { st.z = v; } });
+    Object.defineProperty(view, 'heading', { get: function () { return st.h; }, set: function (v) { st.h = v; } });
+    Object.defineProperty(view, 'speed', { get: function () { return st.v; }, set: function (v) { st.v = v; } });
+    Object.defineProperty(view, 'steer', { get: function () { return st.steer; }, set: function (v) { st.steer = v; } });
+    Object.defineProperty(view, 'gear', { get: function () { return st.gear; }, set: function (v) { st.gear = v; } });
+    return view;
+  }
+
   /**
    * 无头重放一关的标准答案控制段
    * opts: {dt, maxTime, record, phasesOverride}
@@ -55,87 +68,58 @@
     deps();
     opts = opts || {};
     var dt = opts.dt || 1 / 60;
-    var cfg = CFG_.CAR, P = CFG_.PHYS, SC = CFG_.SCORE;
-    var segs = opts.phasesOverride || LVL.getPhases(level);
+    var SC = CFG_.SCORE;
+    var segs = opts.phasesOverride || (function () {
+      var LVL = typeof module === 'object' && module.exports ? require('./levels.js') : window.PS.Levels;
+      return LVL.getPhases(level);
+    })();
     if (!segs || !segs.length) {
       return { success: false, reason: '无标准答案', collisions: 0, time: 0, hits: [], result: null, final: {}, path: [] };
     }
 
-    var obs = LVL.getObstacleObbs(level);
-    var obstacles = obs.map(function (o) { return COL.makeObb(o.x, o.z, o.angle, o.hw, o.hl); });
-    var spotJ = { x: level.spot.x, z: level.spot.z, angle: level.spot.a * Math.PI / 180, w: level.spot.w, l: level.spot.l };
-
-    // 脉冲状态（与规划器同一积分）
+    // 脉冲状态（与规划器同一积分）；sim 以只读写视图消费它
     var step = createReplay(segs, dt, { x: level.player.x, z: level.player.z, h: level.player.a * Math.PI / 180 });
+    var S = step.getSt();
+    var run = SIM.createRun(level, { car: simView(S) });
 
-    var t = 0, collisions = 0, hits = [], holdTimer = 0, wasColliding = false;
+    var hits = [];
     var record = opts.record ? [] : null;
     var maxTime = opts.maxTime || (level.par * 4 + 60);
     var stuck = { timer: 0, x: level.player.x, z: level.player.z, count: 0 };
 
-    var S = step.getSt();
-    function postUpdate() {
-      var obb = COL.carObb(S.x, S.z, S.h, cfg);
-      var hi = COL.firstHit(obb, obstacles);
-      if (hi >= 0) {
-        if (!wasColliding) {
-          collisions++;
-          if (hits.length < 20) hits.push({ t: t, x: S.x, z: S.z, obst: obs[hi].t, ox: obs[hi].x, oz: obs[hi].z });
-        }
-        // 撞击衰减（与 CarPhysics.bounce 一致）
-        S.v = -S.v * CFG_.PHYS.bounceFactor;
-        if (Math.abs(S.v) < 0.25) S.v = 0;
-        // 位置修正：推出障碍物，避免嵌入穿模（与游戏内主循环共用 collision.pushOut）
-        COL.pushOut(S, S.h, cfg, obstacles);
-      }
-      wasColliding = hi >= 0;
-
-      var ev = SCO.evaluate({
-        x: S.x, z: S.z, heading: S.h,
-        spot: spotJ, collisions: collisions, time: t, par: level.par, carCfg: cfg, cfg: SC
-      });
-      var stopped = Math.abs(S.v) < P.stoppedEps;
-      if (ev.completed && stopped) {
-        holdTimer += dt;
-        if (holdTimer >= SC.stopTime) return { done: 'success', ev: ev };
-      } else holdTimer = 0;
-
-      if (collisions >= SC.maxCollisions) return { done: 'fail', reason: '碰撞超过 ' + SC.maxCollisions + ' 次', ev: ev };
-      if (t >= maxTime) return { done: 'fail', reason: '超时', ev: ev };
-
-      stuck.timer += dt;
-      if (stuck.timer >= 1) {
-        var moved = Math.hypot(S.x - stuck.x, S.z - stuck.z);
-        if (moved < 0.06 && t > 2) {
-          stuck.count++;
-          if (stuck.count > 8) return { done: 'fail', reason: '执行卡死', ev: ev };
-        } else stuck.count = 0;
-        stuck.x = S.x; stuck.z = S.z; stuck.timer = 0;
-      }
-      return null;
-    }
-
-    function stepTick() {
-      step(dt); // 推进脉冲状态（与规划器同一积分）
-      t += dt;
-      return postUpdate();
-    }
-
     var res = null;
     var guard = Math.ceil(maxTime / dt);
     while (guard-- > 0) {
-      res = stepTick();
+      step(dt);                       // 推进脉冲状态（与规划器同一积分）
+      var r = run.post(dt);           // 规则步（碰撞/评分/完成/失败——与游戏内同一实现）
       if (record && record.length < 20000) record.push({ x: S.x, z: S.z, h: S.h });
-      if (res) break;
+
+      if (r.counted && hits.length < 20) {
+        hits.push({ t: run.time, x: S.x, z: S.z, obst: r.obDef.t, ox: r.obDef.x, oz: r.obDef.z });
+      }
+      if (r.completed) { res = { done: 'success', ev: r.ev }; break; }
+      if (r.failed) { res = { done: 'fail', reason: '碰撞超过 ' + SC.maxCollisions + ' 次', ev: r.ev }; break; }
+      if (run.time >= maxTime) { res = { done: 'fail', reason: '超时', ev: run.evaluate() }; break; }
+
+      // 卡死看护：每秒检查位移，长时间原地不动视为执行失败
+      stuck.timer += dt;
+      if (stuck.timer >= 1) {
+        var moved = Math.hypot(S.x - stuck.x, S.z - stuck.z);
+        if (moved < 0.06 && run.time > 2) {
+          stuck.count++;
+          if (stuck.count > 8) { res = { done: 'fail', reason: '执行卡死', ev: run.evaluate() }; break; }
+        } else stuck.count = 0;
+        stuck.x = S.x; stuck.z = S.z; stuck.timer = 0;
+      }
     }
     if (!res) res = { done: 'fail', reason: '模拟步数耗尽', ev: null };
     return {
       success: res.done === 'success',
       reason: res.reason || '',
       result: res.ev,
-      collisions: collisions,
+      collisions: run.collisions,
       hits: hits,
-      time: t,
+      time: run.time,
       final: { x: S.x, z: S.z, heading: S.h, gear: S.gear },
       path: record
     };

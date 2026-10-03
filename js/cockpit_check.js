@@ -21,9 +21,9 @@
     g.state = 'playing';
     g.carP.speed = 0; g.carP.steer = 0;
 
-    var wheel = g.cockpit.wheelGroup;
+    var wheel = g.rig.cockpit.wheelGroup;
     var emblem = wheel.getObjectByName('emblem');
-    var frontWheels = g.car.frontWheels;
+    var frontWheels = g.rig.car.frontWheels;
     var ratio = CAR.steerVisualRatio;
     var cap = CAR.steerVisualRate || 300 * D2R;
     var deg = function (r) { return (r * 180 / Math.PI).toFixed(1) + '°'; };

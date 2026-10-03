@@ -9,6 +9,9 @@ var COL = require(path.join(JS, 'collision.js'));
 var SCO = require(path.join(JS, 'scoring.js'));
 var LVL = require(path.join(JS, 'levels.js'));
 var AUTO = require(path.join(JS, 'autopilot.js'));
+var SIM = require(path.join(JS, 'sim.js'));
+var PROG = require(path.join(JS, 'progress.js'));
+var INPUT = require(path.join(JS, 'input.js'));
 
 var passed = 0, failed = 0, failures = [];
 function check(name, cond, extra) {
@@ -256,7 +259,114 @@ LVL.LEVELS.forEach(function (lv) {
   check(lv.id + ' ' + lv.name, ok, info);
 });
 
-/* ---------------- 6. 手柄映射单元测试 ---------------- */
+/* ---------------- 6. 一局模拟（sim）单元测试 ---------------- */
+section('一局模拟');
+(function () {
+  // 完成判定：完美姿态 + 停稳 → stopTime 后 completed，终局评分为全量字段
+  var lv = LVL.byId('lv01');
+  var carP = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS },
+    { x: lv.spot.x, z: lv.spot.z, heading: lv.spot.a * Math.PI / 180 });
+  var run = SIM.createRun(lv, { car: carP });
+  var res = null, steps = 0;
+  for (var i = 0; i < 200; i++) { steps++; res = run.step(1 / 60, {}); if (res.completed) break; }
+  check('sim: 完美姿态停稳后判完成', !!res && res.completed, 'steps=' + steps);
+  check('sim: 完成步数 ≈ stopTime/dt', steps >= CFG.SCORE.stopTime * 60 && steps <= CFG.SCORE.stopTime * 60 + 1, 'steps=' + steps);
+  check('sim: 终局评分含全量字段', res.ev.score != null && res.ev.devDeg != null && res.ev.stars >= 1,
+    'score=' + (res.ev && res.ev.score));
+  check('sim: 时间按固定步长累计', approx(run.time, steps / 60));
+
+  // 碰撞计次 1s 冷却：连续顶蹭在冷却窗内只记 1 次（与游戏内主循环同一语义）
+  var lv2 = LVL.byId('lv02');
+  var mkCarAt = function (x, z, hDeg) {
+    return new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: x, z: z, heading: hDeg * Math.PI / 180 });
+  };
+  var car2 = mkCarAt(5.9, 3, 90);          // 车头抵 lv02 东侧墙（x∈[7.0,7.4]）
+  var run2 = SIM.createRun(lv2, { car: car2 });
+  var first = run2.step(1 / 60, { drive: 1 });
+  check('sim: 首次接触即计次', first.hit && first.counted, 'collisions=' + run2.collisions);
+  for (i = 0; i < 59; i++) run2.step(1 / 60, { drive: 1 });   // 1s 内持续顶蹭
+  check('sim: 冷却窗内连续顶蹭不重复计次', run2.collisions === 1, 'collisions=' + run2.collisions);
+
+  // 失败判定：碰撞达上限 → failed，终局 stars=0
+  var car3 = mkCarAt(5.9, 3, 90);
+  var run3 = SIM.createRun(lv2, { car: car3 });
+  run3.collisions = CFG.SCORE.maxCollisions - 1;
+  var r3 = run3.step(1 / 60, { drive: 1 });
+  check('sim: 碰撞超限判失败', r3.failed);
+  check('sim: 失败终局 stars=0', r3.ev.stars === 0);
+
+  // 独立计次：两个 run 互不影响（状态都在 run 实例上）
+  check('sim: run 实例间状态隔离', run.collisions === 0 && run2.collisions === 1);
+})();
+
+/* ---------------- 7. 进度存档（progress）单元测试 ---------------- */
+section('进度存档');
+(function () {
+  function memStorage() {
+    var mem = {};
+    return { getItem: function (k) { return k in mem ? mem[k] : null; }, setItem: function (k, v) { mem[k] = v; } };
+  }
+  var st = memStorage();
+  var lvs = LVL.LEVELS;
+  check('进度: 空档归一形状', PROG.load(st).levels && typeof PROG.load(st).levels === 'object');
+  check('进度: 空档无星', PROG.anyStars(st) === false);
+  check('进度: 空档续玩目标为首关', PROG.continueTarget(lvs, st) === lvs[0]);
+
+  // 解锁链：第 1 关可玩，其余锁定；拿星后逐关解锁
+  var map = PROG.unlockMap(lvs, { storage: st });
+  check('进度: 首关默认解锁', map[0].unlocked === true);
+  check('进度: 第二关默认锁定', map[1].unlocked === false);
+  PROG.record(lvs[0].id, { stars: 2, score: 80 }, st);
+  map = PROG.unlockMap(lvs, { storage: st });
+  check('进度: 前关拿星解锁下一关', map[1].unlocked === true && map[2].unlocked === false);
+  check('进度: 落档保留最高星与最好成绩', (function () {
+    PROG.record(lvs[0].id, { stars: 1, score: 95 }, st);   // 星低分高 → stars 保持 2，best 更新 95
+    var rec = PROG.load(st).levels[lvs[0].id];
+    return rec.stars === 2 && rec.best === 95;
+  })(), 'rec=' + JSON.stringify(PROG.load(st).levels[lvs[0].id]));
+  check('进度: 拿星后 anyStars 为真', PROG.anyStars(st) === true);
+  check('进度: 续玩目标为首个未拿星关', PROG.continueTarget(lvs, st) === lvs[1]);
+  check('进度: 全通关后续玩目标为末关', (function () {
+    lvs.forEach(function (lv) { PROG.record(lv.id, { stars: 3, score: 100 }, st); });
+    return PROG.continueTarget(lvs, st) === lvs[lvs.length - 1];
+  })());
+  check('进度: unlockAll 全开', PROG.unlockMap(lvs, { storage: st, unlockAll: true }).every(function (m) { return m.unlocked; }));
+  check('进度: 线性下一关', PROG.next(lvs, lvs[0]) === lvs[1] && PROG.next(lvs, lvs[lvs.length - 1]) === null);
+  // 坏档容错：非法 JSON 归一为空进度
+  var bad = memStorage(); bad.setItem('parkmaster_v1', '{oops');
+  check('进度: 坏档容错归空', PROG.load(bad).levels && typeof PROG.load(bad).levels === 'object');
+})();
+
+/* ---------------- 8. 输入源（input）单元测试 ---------------- */
+section('输入源');
+(function () {
+  var keys = { w: false, a: false, s: false, d: false, space: false };
+  var driver = INPUT.createDriver(keys, null);
+  var i0 = driver.sample();
+  check('输入: 双空时保持转角待刹', i0.steer === 0 && i0.drive === 0 && i0.holdSteer === true && i0.handbrake === false);
+  keys.w = true; keys.a = true;
+  i0 = driver.sample();
+  check('输入: 键盘 W/A 映射前进/左转', i0.drive === 1 && i0.steer === 1);
+  keys.space = true;
+  i0 = driver.sample();
+  check('输入: 空格并入到手刹', i0.handbrake === true);
+  var b = driver.blocked();
+  check('输入: 驾驶封锁给中性制动', b.steer === 0 && b.drive === 0 && b.handbrake === false && b.holdSteer === true);
+
+  // 录像/回放：帧序一致，超带后中性制动
+  keys.w = false; keys.a = false; keys.space = false;
+  keys.d = true;
+  var rec = INPUT.createRecorder(driver);
+  rec.sample(); rec.sample(); rec.blocked();
+  check('输入: 录像逐帧记录', rec.tape.length === 3 && rec.tape[0].s === -1 && rec.tape[2].d === 0,
+    'tape=' + JSON.stringify(rec.tape));
+  var play = INPUT.createTapeSource(rec.tape);
+  var p0 = play.sample(), p1 = play.sample(), p2 = play.sample();
+  check('输入: 回放按帧序喂出', p0.steer === -1 && p1.steer === -1 && p2.steer === 0 && p2.holdSteer === true);
+  check('输入: 超带后中性制动', play.isDone() && play.sample().drive === 0);
+})();
+
+/* ---------------- 9. 手柄映射单元测试 ---------------- */
 section('手柄映射');
 (function () {
   var GP = require(path.join(JS, 'gamepad.js'));

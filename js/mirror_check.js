@@ -43,8 +43,8 @@
     marker(0xff0088, 0, 0.25, -10 + REAR - 0.35);  // mN 车尾后 0.35m 地面
     marker(0x0088ff, 0, 0.25, -10 + REAR - 2.0);   // mM 车尾后 2.0m 地面
 
-    var extL = g.mirrorH.mirrors[0], extR = g.mirrorH.mirrors[1], intM = g.mirrorH.mirrors[2];
-    var revRt = g.mirrorH.revRt, revPlane = g.mirrorH.revPlane, revCam = g.mirrorH.revCam;
+    var extL = g.rig.mirrorH.mirrors[0], extR = g.rig.mirrorH.mirrors[1], intM = g.rig.mirrorH.mirrors[2];
+    var revRt = g.rig.mirrorH.revRt, revPlane = g.rig.mirrorH.revPlane, revCam = g.rig.mirrorH.revCam;
 
     /* ---- 1. 宽高比统一：渲染目标 = 显示面比例（无拉伸失真） ---- */
     [[extL, 0], [extR, 1], [intM, 2]].forEach(function (p) {
@@ -74,7 +74,7 @@
     g.assist.revCam = true; g.updateVisuals(1 / 60);
 
     /* ---- 渲染一帧并回读 ---- */
-    g.mirrorH.render(g.renderer, g.scene, true);
+    g.rig.mirrorH.render(g.renderer, g.scene, true);
     /** 在渲染目标里找指定颜色标记：返回显示坐标质心（x 已按镜像翻转为"屏上所见"，
      *  y 已翻转为图像坐标：0=画面顶部）。找不到返回 null */
     function findIn(rt, color) {
@@ -147,7 +147,7 @@
 
     /* ---- 11. 挂载与俯角 ---- */
     check('镜/倒影相机随车移动（挂 carGroup）',
-      extL.cam.parent === g.car.group && intM.cam.parent === g.car.group && revCam.parent === g.car.group);
+      extL.cam.parent === g.rig.car.group && intM.cam.parent === g.rig.car.group && revCam.parent === g.rig.car.group);
     check('倒影相机俯角 ≥10°', revCam.rotation.x <= -10 * Math.PI / 180, (revCam.rotation.x * 180 / Math.PI).toFixed(0) + '°');
 
     /* ---- 清理：移除标记物，恢复关卡初始状态 ---- */
