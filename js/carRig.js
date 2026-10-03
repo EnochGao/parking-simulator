@@ -117,11 +117,14 @@
       /* 仪表盘实时刷新（转速/时速指针；数值不变不重绘） */
       if (cockpit.updateGauges) cockpit.updateGauges(Math.abs(carP.speed) * 3.6, carP.gear);
 
-      /* 刹车灯：手刹 / 松开油门滑行刹车中 / 前进中挂倒车减速（键盘与手柄统一看 input.drive） */
+      /* 刹车灯：手刹 / 松开油门滑行刹车中 / 前进中挂倒车减速（键盘与手柄统一看 input.drive）。
+       * 阈值统一用 PHYS.stoppedEps：与"停稳"判定同一口径，0.04–0.05 之间不再出现
+       * "车已停稳刹车灯仍亮"的错位 */
       var spd = carP.speed;
+      var STOP_EPS = cfg.PHYS.stoppedEps || 0.04;
       var braking = input.handbrake ||
-        (input.drive === 0 && Math.abs(spd) > 0.05) ||
-        (input.drive < 0 && spd > 0.05);
+        (input.drive === 0 && Math.abs(spd) > STOP_EPS) ||
+        (input.drive < 0 && spd > STOP_EPS);
       var bl = braking ? car.brakeOn : car.brakeOff;
       if (bl !== rig._lastBrakeCol) {
         rig._lastBrakeCol = bl;

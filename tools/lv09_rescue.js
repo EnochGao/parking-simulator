@@ -1,5 +1,6 @@
 /* lv09 求解：复用 lv03 已验证的入库段（两关车位横截面一致），仅为 lv09 单独求接近段 */
 'use strict';
+var fs = require('fs');
 var path = require('path');
 var JS = path.join(__dirname, '..', 'js');
 var CFG = require(path.join(JS, 'config.js'));
@@ -55,13 +56,9 @@ function replayBounds(level, segs) {
 }
 
 var bounds03 = replayBounds(lv03, segs03);
+// 直接取第一个进入车位 2m 邻域的边界作为 dock 分割点
 var dockStart = null;
-for (var i = bounds03.length - 1; i >= 0; i--) {
-  if (bounds03[i].idx !== undefined && bounds03[i].hasOwnProperty('idx') && bounds03[i].idx > 0 && dockStart === null && bounds03[i].entered) { dockStart = bounds03[i]; }
-}
-// 上面过滤复杂，直接取第一个进入 2m 邻域的边界
-dockStart = null;
-for (i = 0; i < bounds03.length; i++) {
+for (var i = 0; i < bounds03.length; i++) {
   var bb = bounds03[i];
   var d = Math.hypot(bb.x - lv03.spot.x, bb.z - lv03.spot.z);
   if (d < 2.0) { dockStart = bb; break; }
@@ -138,7 +135,7 @@ console.log('验证: 成功=' + vr.success + ' 碰撞=' + vr.collisions, vr.resu
 if (vr.success) {
   var d0 = require(path.join(JS, 'demo_paths.js'));
   d0.lv09 = lv09segs;
-  var file = '/* 自动生成：tools/solver.js 产物（控制段：g 档位 sf 转向 dur 秒），勿手改 */\n' +
+  var file = '/* 自动生成：tools/solver.js · tools/lv09_rescue.js 产物（控制段：g 档位 sf 转向 dur 秒），勿手改 */\n' +
     '(function (root, factory) {\n' +
     '  var api = factory();\n' +
     "  if (typeof module === 'object' && module.exports) { module.exports = api; }\n" +

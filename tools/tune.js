@@ -12,7 +12,11 @@ levels.forEach(function (lv) {
   var r = AUTO.runLevel(lv, { record: true });
   console.log('--- ' + lv.id + ' ' + lv.name + ' ---');
   console.log('  成功=' + r.success + ' 碰撞=' + r.collisions + ' 用时=' + r.time.toFixed(1) + 's 原因=' + r.reason);
-  console.log('  末点=(' + r.final.x.toFixed(2) + ', ' + r.final.z.toFixed(2) + ') 朝向=' + (r.final.heading * 180 / Math.PI).toFixed(1) + '° 档=' + r.final.gear);
+  if (r.final && r.final.x != null) {
+    console.log('  末点=(' + r.final.x.toFixed(2) + ', ' + r.final.z.toFixed(2) + ') 朝向=' + (r.final.heading * 180 / Math.PI).toFixed(1) + '° 档=' + r.final.gear);
+  } else {
+    console.log('  末点=（该关无演示路径，未执行）');
+  }
   if (r.result) {
     console.log('  偏差 pos=' + r.result.posOffset.toFixed(3) + 'm ang=' + r.result.devDeg.toFixed(2) + '° 得分=' + r.result.score + ' 星=' + r.result.stars);
   }

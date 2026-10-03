@@ -1,4 +1,4 @@
-/* 自动生成：tools/solver.js 产物（控制段：g 档位 sf 转向 dur 秒），勿手改 */
+/* 自动生成：tools/solver.js · tools/lv09_rescue.js 产物（控制段：g 档位 sf 转向 dur 秒），勿手改 */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }

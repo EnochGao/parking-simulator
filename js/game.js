@@ -13,6 +13,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   var D2R = Math.PI / 180;
   var DT = 1 / 60;
+  var CAM_PITCH = 5 * D2R;   // 主相机俯角：飞度高座椅、低仪表台，视线越过台面看到仪表与引擎盖
 
   function Game(container) {
     var PS = window.PS;
@@ -77,6 +78,9 @@
     this.acc = 0; // 固定步长累加器
     this.autopilotActive = false;
     this.replay = null;      // 演示驾驶重放器（autopilot.createReplay）
+    this._lastEv = null;     // 最近一步评分（HUD 每渲染帧消费，见 updateHud）
+    this._assistKey = -1; this._assistText = '';
+    this._topOn = false;     // 俯视开关沿：开启瞬间刷新一次俯视投影矩阵
     /* 镜面/倒影 RT 脏检查（见 render）：静止泊车时不重绘 3 面镜 + 倒影共 4 遍场景 */
     this._mirrorsDirty = false;
     this._lastRevOn = null; this._lastRevSteer = 0;
@@ -96,6 +100,7 @@
       self.renderer.setSize(w, h);
       self.camera.aspect = w / h;
       self.camera.updateProjectionMatrix();
+      self.syncTopProjection();  // 俯视水平视域随宽高比扩展，resize 时同步
       self._frameDirty = true;   // 画布已换新缓冲，叠加层背后的最后一帧必须补画
     };
     window.addEventListener('resize', this.onResize);
@@ -166,6 +171,10 @@
     if (this.rig) { this.rig.dispose(); this.rig = null; }
     this.level = lv;
     this.mode = mode || 'play';
+    /* 演示态不跨关泄漏：?autotest 播完进结算后点"下一关/再来一次"，残留的
+     * 已播完重放器会让车辆永续静止挂死——每次换关/重开一律回到人工驾驶 */
+    this.autopilotActive = false;
+    this.replay = null;
 
     var tex = this.textures || (this.textures = PS.Textures.createTextures());
     this.worldH = PS.World.createWorld(this.scene, lv, tex);
@@ -369,18 +378,32 @@
       }
     }
     this.audio.engine(carP.speed);
+    // HUD 不在此刷新：评分 ev 缓存到 _lastEv，由 updateVisuals → updateHud 每渲染帧消费
+    //（此前每物理步 60Hz 拼提示字符串 + 分配 state 对象，低帧率时一帧还白算多次）
+    this._lastEv = r.ev;
+  };
+
+  /** HUD 刷新（每渲染帧一次）。提示/辅助文案仅在其输入变化时重建，配合 hud.js
+   * 的 DOM 差量缓存，静止泊车时本函数近乎零开销 */
+  Game.prototype.updateHud = function () {
+    var carP = this.run.car;
+    var ev = this._lastEv || this.run.evaluate();
+    var assistKey = (this.assist.guide ? 1 : 0) | (this.assist.top ? 2 : 0) | (this.assist.revCam ? 4 : 0);
+    if (assistKey !== this._assistKey) {
+      this._assistKey = assistKey;
+      this._assistText = (this.assist.guide ? '引导✓' : '') + (this.assist.top ? ' 俯视✓' : '') + (this.assist.revCam ? ' 倒影✓' : '');
+    }
     // 无情境提示时轮播本关教学要点（每 6s 一条）
     var tips = (this.level && this.level.tips) || [];
     var tipTxt = tips.length ? tips[Math.floor(this.run.time / 6) % tips.length] : '';
-    var ev = r.ev;
     this.hud.update({
       time: this.run.time, collisions: this.run.collisions, gear: carP.gear, speed: carP.speed,
-      radar: this.radar, radarRange: RR,
+      radar: this.radar, radarRange: this.cfg.RADAR ? this.cfg.RADAR.range : 2.5,
       hint: this.mirrorMode ?
         '后视镜调节 [' + (this.mirrorSel === 0 ? '左外镜' : this.mirrorSel === 1 ? '右外镜' : '车内镜') + '] · A/D 左右 · W/S 上下 · 1/2/3 切换 · V 完成' :
         (!ev.completed && ev.posOffset < 3 && ev.inside ? '很好！停稳保持…' :
         (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右') : tipTxt)),
-      assistText: (this.assist.guide ? '引导✓' : '') + (this.assist.top ? ' 俯视✓' : '') + (this.assist.revCam ? ' 倒影✓' : '')
+      assistText: this._assistText
     });
   };
 
@@ -398,9 +421,8 @@
       if (Math.abs(this.lookYaw - lookTarget) < 0.005) this.lookYaw = lookTarget;
     }
     this.camera.rotation.y = Math.PI + this.lookYaw;
-    // rotation.y=π 时欧拉 XYZ 下 x 分量方向相反：+5° 即视线向下俯——飞度高座椅、低仪表台，
-    // 视线越过台面看到液晶仪表与大片引擎盖，仪表台入画但不喧宾夺主
-    this.camera.rotation.x = this.lookPitch + 5 * D2R;
+    // rotation.x 为正即视线向下俯（rotation.y=π 时欧拉 XYZ 下 x 分量方向相反）
+    this.camera.rotation.x = this.lookPitch + CAM_PITCH;
     /* 太阳灯跟随 */
     this.sun.position.set(carP.x + 18, 30, carP.z + 12);
     this.sun.target.position.set(carP.x, 0, carP.z);
@@ -413,16 +435,17 @@
       this._lastShadowPose = { x: carP.x, z: carP.z, h: carP.heading };
     }
 
-    /* 俯视相机跟随（垂直视域固定，水平随窗口宽高比扩展，避免画面拉伸失真）
-     * 宽高比用 resize 时缓存的 _viewAspect，不逐帧读 window 布局 */
-    var topAspect = this._viewAspect;
-    var halfH = 10.5, halfW = Math.min(26, halfH * topAspect);
-    this.topCamera.left = -halfW; this.topCamera.right = halfW;
-    this.topCamera.top = halfH; this.topCamera.bottom = -halfH;
-    this.topCamera.position.set(carP.x, 42, carP.z);
-    this.topCamera.up.set(0, 0, -1);
-    this.topCamera.lookAt(carP.x, 0, carP.z);
-    this.topCamera.updateProjectionMatrix();
+    /* 俯视相机：位姿跟随仅在俯视开启时逐帧更新；投影矩阵只随窗口宽高比变化——
+     * 开启瞬间与 resize 时由 syncTopProjection 刷新（此前每帧无条件重算，即使从未进俯视） */
+    if (this.assist.top !== this._topOn) {
+      this._topOn = this.assist.top;
+      if (this._topOn) this.syncTopProjection();
+    }
+    if (this.assist.top) {
+      this.topCamera.position.set(carP.x, 42, carP.z);
+      this.topCamera.up.set(0, 0, -1);
+      this.topCamera.lookAt(carP.x, 0, carP.z);
+    }
 
     /* 地库天顶组：俯视上帝视角时隐藏，否则天花板挡住整个俯视画面 */
     if (this.worldH && this.worldH.roof) this.worldH.roof.visible = !this.assist.top;
@@ -448,6 +471,16 @@
         }
       }
     }
+
+    this.updateHud();
+  };
+
+  /** 俯视投影矩阵：垂直视域固定，水平随窗口宽高比扩展（开启俯视/resize 时调用） */
+  Game.prototype.syncTopProjection = function () {
+    var halfH = 10.5, halfW = Math.min(26, halfH * this._viewAspect);
+    this.topCamera.left = -halfW; this.topCamera.right = halfW;
+    this.topCamera.top = halfH; this.topCamera.bottom = -halfH;
+    this.topCamera.updateProjectionMatrix();
   };
 
   Game.prototype.render = function () {

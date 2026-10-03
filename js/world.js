@@ -73,8 +73,9 @@
         pc.rotation.y = a;
         group.add(pc);
       } else if (o.t === 'wall') {
-        var d = PS.Levels.DIMS.wall;
-        var wm = new THREE.Mesh(new THREE.BoxGeometry(0.4, o.h || 2.2, o.len), brickM);
+        // 厚度用 o.wid（与碰撞 OBB 的 hw=(wid||0.4)/2 同源）：路沿墙 wid=0.3 时
+        // 视觉墙与碰撞盒对齐，贴墙不再出现每侧 5cm 的穿模缝
+        var wm = new THREE.Mesh(new THREE.BoxGeometry(o.wid || 0.4, o.h || 2.2, o.len), brickM);
         wm.position.set(o.x, (o.h || 2.2) / 2, o.z);
         wm.rotation.y = a;
         wm.castShadow = true; wm.receiveShadow = true;

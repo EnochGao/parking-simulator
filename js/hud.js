@@ -46,7 +46,6 @@
       '</div>' +
       '<div class="flash" id="hud-flash"></div>';
     overlay.appendChild(hud);
-    var $ = function (id) { return hud.querySelector('#' + id); };
     /* 每帧差量更新：缓存节点引用与上次值，值不变不写 DOM（避免 60Hz 布局/绘制抖动） */
     var nodeCache = {}, lastVals = {}, radarBars = null;
     function node(id) {
@@ -89,7 +88,7 @@
       setText('hud-assist', state.assistText || '');
     };
     api.flash = function () {
-      var f = $('hud-flash');
+      var f = node('hud-flash');
       f.classList.remove('go');
       void f.offsetWidth;
       f.classList.add('go');

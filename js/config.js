@@ -32,14 +32,16 @@
       maxRev: 10 / 3.6,     // 倒车极速
       accel: 3.0,           // 油门加速度
       brake: 6.0,           // 制动减速度
-      drag: 0.6,            // 自然阻力
+      drag: 0.6,            // 自然阻力（仅 pulse.js 演示/规划积分使用；玩家侧松开即刹车，不走此项）
       steerRate: 55 * D2R,  // 前轮转向速率 rad/s（演示/引导路径经 pulse.js 与此耦合，改值需重算 solver）
       centerRate: 70 * D2R, // 回正速率（同上）
       handbrakeDecel: 9,
       bounceFactor: 0.3,
       stoppedEps: 0.04,
       gearSwitchMaxSpeed: 0.2,
-      creep: 1.4,           // 自动挡蠕行速度 km/h（挂 R 轻点 S 的保持速度；演示路径车速同此值，改值需重算关卡演示脚本）
+      creep: 1.4,           // 自动挡蠕行速度 km/h（挂 R 轻点 S 的保持速度；physics.js 按 creep/3.6 换算 m/s 使用）
+      demoSpeed: 1.4,       // 演示/规划路径车速 m/s（pulse.js 直接使用；与 creep 数值巧合相同但单位不同——
+                            // 玩家蠕行实为 creep/3.6≈0.39 m/s。两值单位不同不可互改，改 demoSpeed 需重算关卡演示脚本 npm run solver）
       creepRampTime: 0.6,   // 持续按住倒车键超过该时长后，从蠕行平滑加速到倒车极速（此前轻点＝蠕行对位）
       creepAccel: 1.2,      // 倒车蠕行接合加速度 m/s²（0→蠕行速度约 0.33s，模拟液力变矩器缓放；
                             // 用全局 accel 3.0 会在 0.13s 内瞬间贴上蠕行速度，起步发"咣"）

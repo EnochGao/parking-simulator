@@ -10,6 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   var GP;
   function deps() {
+    if (GP) return;   // 只解析一次（浏览器端脚本加载顺序不保证，故不能在模块加载时解析）
     if (typeof module === 'object' && module.exports) GP = require('./gamepad.js');
     else GP = window.PS.Gamepad;
   }

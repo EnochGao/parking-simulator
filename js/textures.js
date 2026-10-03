@@ -86,8 +86,7 @@
       brick: tex(brick(), 1, 1),
       windows: tex(windows(), 1, 1),
       concrete: tex(concrete(), 2, 2),
-      grass: tex(grass(), 3, 3),
-      white: new THREE.MeshLambertMaterial({ color: 0xffffff })
+      grass: tex(grass(), 3, 3)
     };
   }
 

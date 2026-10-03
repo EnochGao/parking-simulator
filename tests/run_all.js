@@ -247,6 +247,14 @@ LVL.LEVELS.forEach(function (lv) {
   check(tag + ': 完美姿态可完成', ev.completed);
 });
 
+/* 关卡数据门禁：共面 z-fight / 车辆穿模扫描（tests/scan_zfight.js）。
+ * 两障碍同法线表面共面会在深度缓冲上争夺 → 行驶中"虚影闪烁"（lv01 大楼虚影即此），
+ * 此检查防止改关卡数据时再次引入 */
+(function () {
+  var f = require(path.join(__dirname, 'scan_zfight.js')).scan();
+  check('关卡数据: 无共面zfight/车辆穿模', f.length === 0, f.join(' | '));
+})();
+
 /* ---------------- 5. 自动驾驶回归（全关卡可通关性） ---------------- */
 section('自动驾驶回归');
 LVL.LEVELS.forEach(function (lv) {
@@ -394,7 +402,7 @@ section('手柄映射');
   check('手柄: 无手柄时纯键盘输入可用', m.steer === -0.4 && m.drive === -1);
 })();
 
-/* ---------------- 7. 手柄模块集成验证 ---------------- */
+/* ---------------- 10. 手柄模块集成验证 ---------------- */
 section('手柄集成');
 (function () {
   // 子进程运行 tools/gpad_itest.js（内部 mock navigator/document，避免污染本进程）
@@ -403,7 +411,7 @@ section('手柄集成');
     (r.stdout || '').split('\n').filter(function (l) { return l.indexOf('✗') >= 0; }).join(' | '));
 })();
 
-/* ---------------- 8. 座舱转向标定（方向盘 ↔ 车轮 ↔ 车标） ---------------- */
+/* ---------------- 11. 座舱转向标定（方向盘 ↔ 车轮 ↔ 车标） ---------------- */
 section('座舱转向标定');
 (function () {
   var CAR = CFG.CAR;
@@ -436,6 +444,53 @@ section('座舱转向标定');
   check('座舱：12 点回正标线挂在方向盘组顶部', !!stripe && stripe.parent === wheel &&
     Math.abs(stripe.position.y - 0.175) < 1e-9 && Math.abs(stripe.position.x) < 1e-9,
     stripe ? ('y=' + stripe.position.y.toFixed(3)) : '缺失');
+})();
+
+/* ---------------- 12. 脉冲积分（pulse）单元测试 ---------------- */
+section('脉冲积分');
+(function () {
+  var PULSE = require(path.join(JS, 'pulse.js'));
+  var P = CFG.PHYS;
+  // 巡行速度语义：demoSpeed 是 m/s、供规划/演示侧专用（玩家蠕行是 creep/3.6，单位不同）
+  var st = { x: 0, z: 0, h: 0, v: 0, steer: 0, gear: 'D' };
+  for (var i = 0; i < 120; i++) PULSE.stepMotion(st, 0, 1 / 60, P, CFG.CAR);
+  check('pulse: 前进巡行收敛到 demoSpeed(m/s)', approx(st.v, P.demoSpeed, 0.02), 'v=' + st.v.toFixed(3));
+  check('pulse: demoSpeed 与玩家蠕行是两个量纲', P.demoSpeed > P.creep / 3.6);
+  check('pulse: 直行沿 +z 且后轴参考无横偏', st.z > 1 && Math.abs(st.x) < 1e-9 && approx(st.h, 0));
+
+  st = { x: 0, z: 0, h: 0, v: 0, steer: 0, gear: 'R' };
+  for (i = 0; i < 120; i++) PULSE.stepMotion(st, 0, 1 / 60, P, CFG.CAR);
+  check('pulse: R 挡巡行为 -demoSpeed', approx(st.v, -P.demoSpeed, 0.02), 'v=' + st.v.toFixed(3));
+
+  // 转向斜坡：目标角以 steerRate 渐升、目标 0 以 centerRate 回正（与 physics.js 同式）
+  st = { x: 0, z: 0, h: 0, v: 0, steer: 0, gear: 'D' };
+  PULSE.stepMotion(st, 1, 1 / 60, P, CFG.CAR);
+  check('pulse: 转向以 steerRate 斜升', approx(st.steer, P.steerRate / 60, 1e-9), (st.steer / CFG.D2R).toFixed(2) + '°');
+  st = { x: 0, z: 0, h: 0, v: 0, steer: 30 * CFG.D2R, gear: 'D' };
+  PULSE.stepMotion(st, 0, 1 / 60, P, CFG.CAR);
+  check('pulse: 回正以 centerRate 斜降', approx(st.steer, 30 * CFG.D2R - P.centerRate / 60, 1e-9));
+
+  // 超速滑行：高于巡行速度时按 drag 渐减（不瞬跳、不反向）
+  st = { x: 0, z: 0, h: 0, v: P.demoSpeed + 1, steer: 0, gear: 'D' };
+  PULSE.stepMotion(st, 0, 1 / 60, P, CFG.CAR);
+  check('pulse: 超速按 drag 渐减', st.v > P.demoSpeed && st.v < P.demoSpeed + 1, 'v=' + st.v.toFixed(3));
+
+  // 制动步：减速度 = brakeInput(缺省 0.8) × brake；低速一步刹停
+  st = { x: 0, z: 0, h: 0, v: 0.5, steer: 0, gear: 'D' };
+  PULSE.brakeStep(st, 1 / 60, P);
+  check('pulse: brakeStep 按制动公式减速', approx(st.v, 0.5 - 0.8 * P.brake / 60, 1e-9), 'v=' + st.v.toFixed(3));
+  st = { x: 0, z: 0, h: 0, v: 0.05, steer: 0, gear: 'D' };
+  PULSE.brakeStep(st, 1 / 60, P);
+  check('pulse: 低速一步刹停不过冲', st.v === 0);
+})();
+
+/* ---------------- 13. 拐弯真实性门禁（tools/turn_check.js） ---------------- */
+section('拐弯真实性');
+(function () {
+  var r = require('child_process').spawnSync(process.execPath,
+    [path.join(__dirname, '..', 'tools', 'turn_check.js')], { encoding: 'utf8' });
+  check('拐弯真实性：全部指标在阈值内', r.status === 0,
+    (r.stdout || '').split('\n').filter(function (l) { return l.indexOf('✗') >= 0 || l.indexOf('FAIL') >= 0; }).join(' | '));
 })();
 
 /* ---------------- 汇总 ---------------- */

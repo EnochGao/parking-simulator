@@ -150,6 +150,23 @@
       extL.cam.parent === g.rig.car.group && intM.cam.parent === g.rig.car.group && revCam.parent === g.rig.car.group);
     check('倒影相机俯角 ≥10°', revCam.rotation.x <= -10 * Math.PI / 180, (revCam.rotation.x * 180 / Math.PI).toFixed(0) + '°');
 
+    /* ---- 12. 渲染后可见性逐项还原（防"座舱框消失"回归：镜面渲染会临时隐藏
+     * 内饰/内镜壳/遮罩/车顶板，渲染完必须还原——可见性保存区配对错位时
+     * 这里会率先失败，主视图座舱不再无声消失） ---- */
+    (function () {
+      var tracked = g.rig.mirrorH.hideInMirror.concat(intM.hideExtra);
+      tracked.forEach(function (o) { o.visible = true; });   // 归一化初态（真实游玩中这些对象均可见），
+      var before = tracked.map(function (o) { return o.visible; }); // 防止取样前已被污染导致检查假通过
+      g.rig.mirrorH.render(g.renderer, g.scene, false);   // 连续两帧镜面渲染
+      g.rig.mirrorH.render(g.renderer, g.scene, false);
+      var bad = [];
+      tracked.forEach(function (o, i) {
+        if (o.visible !== before[i]) bad.push((o.name || o.geometry.type) + '@' + i);
+      });
+      check('镜面渲染后内饰/镜壳/车顶板可见性逐项还原', bad.length === 0,
+        bad.length ? ('未还原: ' + bad.join(',')) : tracked.length + ' 项全部还原');
+    })();
+
     /* ---- 清理：移除标记物，恢复关卡初始状态 ---- */
     markers.forEach(function (m) {
       g.scene.remove(m);

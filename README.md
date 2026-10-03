@@ -63,9 +63,10 @@ node tools/server.js 8137
 ## 测试（全场景覆盖）
 
 ```bash
-npm test                  # 单元测试 + 关卡数据校验 + 全关卡自动驾驶回归（node tests/run_all.js）
+npm test                  # 单元测试 + 关卡数据校验 + 全关卡自动驾驶回归 + 脉冲积分
+                          # + 拐弯真实性门禁（node tests/run_all.js）
 npm run audit:mirror      # 后视镜/倒车影像几何审计（GB 15084 / UN R46 / FMVSS 111 对照，37 项）
-npm run turn              # 拐弯真实性数值检查（后轴参考自行车模型 vs 真车几何对照）
+npm run turn              # 拐弯真实性数值检查（断言化门禁，偏差超阈值即失败退出）
 npm run solver            # （调物理参数后）重新求解各关标准答案路径
 npm start                 # 启动本地服务器（node tools/server.js 8137）
 ```
@@ -73,7 +74,7 @@ npm start                 # 启动本地服务器（node tools/server.js 8137）
 URL 参数：`?level=lv03` 直达关卡；`?autotest=lv03` 观看标准答案演示；
 `?selftest=all` 浏览器全关回归；`?mirrortest=1` 后视镜/倒影渲染回读自测；
 `?cockpittest=1` 座舱转向联动自测（方向盘↔车轮↔车标）；`?unlock=1` 解锁全部关卡。
-浏览器自测结果写入页面标题（如 MIRROR CHECK PASS 27/27）与 window.__*_RESULTS。
+浏览器自测结果写入页面标题（如 MIRROR CHECK PASS 28/28）与 window.__*_RESULTS。
 
 ## 架构
 
@@ -85,10 +86,11 @@ Node/浏览器双端同构模块，`tests/run_all.js` 与浏览器 `?selftest=al
 | 层 | 模块 | 说明 |
 |---|---|---|
 | 规则 | `sim.js` | 一局的步进/碰撞计次/评分/完成/失败——游戏内与无头回归共用同一实现 |
-| 物理 | `physics.js` / `collision.js` / `scoring.js` / `pulse.js` | 运动学、OBB+SAT、评分、脉冲积分 |
-| 数据 | `levels.js` / `progress.js` | 关卡数据；进度与存档（解锁链/续玩/落档） |
+| 物理 | `physics.js` / `collision.js` / `scoring.js` / `pulse.js` | 运动学、OBB+SAT、评分、脉冲积分（演示/规划侧专用积分源） |
+| 数据 | `levels.js` / `demo_paths.js` / `progress.js` | 关卡数据；标准答案控制段（工具产物）；进度与存档（解锁链/续玩/落档） |
 | 输入 | `input.js` / `gamepad.js` | 可替换输入源（键盘+手柄合并，支持录像/回放）与手柄轮询 |
 | 表现 | `carRig.js` / `cockpit.js` / `carModel.js` / `world.js` / `assist.js` / `hud.js` | 整车装配与单车表现、座舱、场景、辅助、纯视图 UI |
+| 自测 | `mirror_check.js` / `cockpit_check.js` | 浏览器渲染回读自测（`?mirrortest=1` / `?cockpittest=1`） |
 | 壳 | `game.js` / `main.js` | 渲染器/主循环/状态机/界面流转 |
 
 新增玩法（如剧情模式、对战）以"换输入源 + 换规则参数 + 多建一台 rig"接入，无需改动壳层。

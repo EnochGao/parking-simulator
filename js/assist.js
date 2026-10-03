@@ -98,19 +98,20 @@
     };
   }
 
-  /** 倒车雷达：车尾横向采样点到障碍物 OBB 的最近距离 */  function rearDistance(carPose, carCfg, obstacles) {
-    var COL = PS.Collision;
+  /** 倒车雷达：车尾横向采样点到障碍物 OBB 的最近距离 */
+  function rearDistance(carPose, carCfg, obstacles) {
     var h = carPose.heading, c = Math.cos(h), s = Math.sin(h);
     // 车尾中心（局部 z = -len/2）
     var rx = carPose.x - s * (carCfg.length / 2);
     var rz = carPose.z - c * (carCfg.length / 2);
     var best = Infinity;
-    for (var k = -1; k <= 1; k++) { // 车尾左中右三点
-      var px = rx + c * k * 0.6;
-      var pz = rz - s * k * 0.6;
-      for (var i = 0; i < obstacles.length; i++) {
-        var o = obstacles[i];
-        var dh = Math.cos(-o.angle), dsh = Math.sin(-o.angle);
+    for (var i = 0; i < obstacles.length; i++) {
+      var o = obstacles[i];
+      // 障碍静止：局部坐标变换的 cos/sin 每障碍只算一次（此前每个采样点重复算 3 遍）
+      var dh = Math.cos(-o.angle), dsh = Math.sin(-o.angle);
+      for (var k = -1; k <= 1; k++) { // 车尾左中右三点
+        var px = rx + c * k * 0.6;
+        var pz = rz - s * k * 0.6;
         var dx = px - o.x, dz = pz - o.z;
         var lx = dx * dh - dz * dsh, lz = dx * dsh + dz * dh;
         var qx = Math.max(-o.hw, Math.min(o.hw, lx));

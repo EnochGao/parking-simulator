@@ -91,9 +91,18 @@ function tailSwingOut(pts, l0, outerKey) {
 function latOf(p, l0) { return p[0] * l0.x + p[1] * l0.z; }
 
 var l0 = left(0);
-function reportRow(name, s, r) {
-  var d = r !== 0 ? ((s - r) / r * 100).toFixed(1) + '%' : '—';
-  console.log('  ' + name + '  游戏=' + s.toFixed(3) + 'm  真车参考=' + r.toFixed(3) + 'm  偏差=' + d);
+var failures = 0;
+function reportRow(name, s, r, tolPct) {
+  var dev = r !== 0 ? (s - r) / r * 100 : 0;
+  var ok = !(tolPct != null) || Math.abs(dev) <= tolPct;
+  if (!ok) failures++;
+  console.log('  ' + name + '  游戏=' + s.toFixed(3) + 'm  真车参考=' + r.toFixed(3) + 'm  偏差=' +
+    (r !== 0 ? dev.toFixed(1) + '%' : '—') + (ok ? '' : '  ✗ 超阈值 ±' + tolPct + '%'));
+  return dev;
+}
+function check(name, ok, detail) {
+  if (!ok) failures++;
+  console.log('  ' + (ok ? '✓' : '✗') + ' ' + name + (detail ? '（' + detail + '）' : ''));
 }
 
 /* ============ 满舵左转 90°（前进） ============ */
@@ -106,12 +115,14 @@ var icrS = circleCenter(S.center, 0, mid(S.center.length), S.center.length - 1);
 var icrR = circleCenter(R.rearAxle, 0, mid(R.rearAxle.length), R.rearAxle.length - 1);
 
 // ICR 横向位置（相对初始后轴中心，沿初始车横向轴）：真车模型应在后轴延长线上（横偏=0）
-console.log('  瞬时转向中心横向位置（0=后轴延长线上，正=偏车前方）：' +
-  '游戏=' + latOf([icrS.x - 0, icrS.z + dRear], l0).toFixed(3) + 'm' +
-  '  真车参考=' + latOf([icrR.x - 0, icrR.z + dRear], l0).toFixed(3) + 'm');
+var icrSLat = latOf([icrS.x - 0, icrS.z + dRear], l0);
+var icrRLat = latOf([icrR.x - 0, icrR.z + dRear], l0);
+var icrDev = Math.abs((icrSLat - icrRLat) / icrRLat * 100);
+check('瞬时转向中心位置：游戏 vs 真车参考', icrDev <= 2.5,
+  '游戏=' + icrSLat.toFixed(3) + 'm 真车参考=' + icrRLat.toFixed(3) + 'm 偏差=' + icrDev.toFixed(1) + '%');
 
-reportRow('后轴转向半径', fitRadius(S.rearAxle, 0, mid(S.rearAxle.length), S.rearAxle.length - 1), Rr);
-reportRow('车中心转向半径', fitRadius(S.center, 0, mid(S.center.length), S.center.length - 1), Math.sqrt(Rr * Rr + dRear * dRear));
+reportRow('后轴转向半径', fitRadius(S.rearAxle, 0, mid(S.rearAxle.length), S.rearAxle.length - 1), Rr, 2.5);
+reportRow('车中心转向半径', fitRadius(S.center, 0, mid(S.center.length), S.center.length - 1), Math.sqrt(Rr * Rr + dRear * dRear), 2.5);
 
 /* 前外轮半径：前轴 ± 轮距/2，取离各自 ICR 更远的（外侧） */
 function outerWheelRadius(pts, icr) {
@@ -120,20 +131,27 @@ function outerWheelRadius(pts, icr) {
   var w2 = Math.hypot(p0[0] - wl0.x * CAR.trackF / 2 - icr.x, p0[1] - wl0.z * CAR.trackF / 2 - icr.z);
   return Math.max(w1, w2);
 }
-reportRow('前外轮转弯半径（GR9 标定 4.9m）', outerWheelRadius(S, icrS), outerWheelRadius(R, icrR));
-reportRow('车尾外摆（越出车宽包络）', tailSwingOut(S, l0, 'rearRC'), tailSwingOut(R, l0, 'rearRC'));
+reportRow('前外轮转弯半径（GR9 标定 4.9m）', outerWheelRadius(S, icrS), outerWheelRadius(R, icrR), 2.5);
+reportRow('车尾外摆（越出车宽包络）', tailSwingOut(S, l0, 'rearRC'), tailSwingOut(R, l0, 'rearRC'), 2.5);
 /* 内轮差：转 90° 后前外轮与后外轮的横向位置差 */
 var innerDiff = function (pts) {
   var lfe = pts.frontAxle[pts.frontAxle.length - 1], lre = pts.rearRC[pts.rearRC.length - 1];
   return Math.abs(latOf(lfe, l0) - latOf(lre, l0));
 };
-reportRow('内轮差（90° 后前外轮-后外轮横向差）', innerDiff(S), innerDiff(R));
+reportRow('内轮差（90° 后前外轮-后外轮横向差）', innerDiff(S), innerDiff(R), 2.5);
 
 /* ============ 满舵左打、倒车 90° ============ */
 console.log('== 满舵左打、倒车 90°——车尾摆向与外摆 ==');
 var SRev = simModel(1, -1, 90), RRev = realModel(1, -1, 90);
 var sLat = latOf(SRev.rearLC[SRev.rearLC.length - 1], l0);
 var rLat = latOf(RRev.rearLC[RRev.rearLC.length - 1], l0);
-console.log('  倒车满舵左打 90°：车内侧后角横向位置  游戏=' + sLat.toFixed(3) + 'm  真车参考=' + rLat.toFixed(3) + 'm' +
-  '  （正值=甩向车左；两模型方向' + (sLat > 0 && rLat > 0 ? '一致 ✓' : '不一致 ✗') + '）');
-reportRow('车尾外摆（越出车宽包络，倒车）', tailSwingOut(SRev, l0, 'rearRC'), tailSwingOut(RRev, l0, 'rearRC'));
+check('倒车满舵左打 90°：车尾甩向车左（两模型方向一致）', sLat > 0 && rLat > 0,
+  '游戏=' + sLat.toFixed(3) + 'm 真车参考=' + rLat.toFixed(3) + 'm，正值=甩向车左');
+reportRow('车尾外摆（越出车宽包络，倒车）', tailSwingOut(SRev, l0, 'rearRC'), tailSwingOut(RRev, l0, 'rearRC'), 2.5);
+
+/* ============ 门禁汇总 ============ */
+if (failures > 0) {
+  console.log('TURN CHECK FAIL（' + failures + ' 项超阈值）');
+  process.exit(1);
+}
+console.log('TURN CHECK PASS（全部真实性指标在阈值内）');

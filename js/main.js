@@ -34,11 +34,15 @@
       game.loadLevel(q.autotest, 'autotest');
       game.hud.hideScreen();
       game.state = 'playing';
-      game.autopilotActive = true;
       var segs = window.PS.Levels.getPhases(game.level);
-      game.replay = window.PS.Autopilot.createReplay(segs, DT, {
-        x: game.level.player.x, z: game.level.player.z, h: game.level.player.a * Math.PI / 180
-      });
+      if (segs && segs.length) {
+        game.autopilotActive = true;
+        game.replay = window.PS.Autopilot.createReplay(segs, DT, {
+          x: game.level.player.x, z: game.level.player.z, h: game.level.player.a * Math.PI / 180
+        });
+      } else {
+        document.title = 'AUTOTEST SKIP（该关无标准答案路径）';
+      }
       return;
     }
     if (q.level) {

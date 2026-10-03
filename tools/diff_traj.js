@@ -1,9 +1,15 @@
-/* 轨迹对比诊断：规划器仿真 vs 执行器重放，逐步找发散点 */
+/* 轨迹对比诊断：规划积分（pulse.js，与 solver/autopilot 同一积分源）
+ * vs 玩家实车模型（physics.js CarPhysics 吃同样的控制段输入），逐步找发散点。
+ * 注意：脉冲积分的段内车速恒为 PHYS.demoSpeed（m/s），实车模型受蠕行窗口/
+ * 加速度渐入影响，同输入下纵向速度本就不同——本工具量化的是两套速度法则
+ * 与同一转向几何的轨迹差，用于评估"按标准答案手动开"的手感落差。
+ * 运行：node tools/diff_traj.js [levelId] [margin] [gearCost] */
 'use strict';
 var path = require('path');
 var JS = path.join(__dirname, '..', 'js');
 var CFG = require(path.join(JS, 'config.js'));
 var PHYS = require(path.join(JS, 'physics.js'));
+var PULSE = require(path.join(JS, 'pulse.js'));
 var LVL = require(path.join(JS, 'levels.js'));
 var SOLVE = require(path.join(__dirname, 'solver.js'));
 
@@ -15,59 +21,42 @@ if (!r.ok) { console.log('求解失败', r.reason); process.exit(1); }
 var segs = r.segs;
 console.log('段数', segs.length, JSON.stringify(segs.map(function (s) { return [s.g, s.sf, s.dur]; })));
 
-var car = CFG.CAR, dt = 1 / 60, rate = CFG.PHYS.steerRate, acc = CFG.PHYS.accel * 0.35, vr = CFG.PHYS.creep;
-var x = lv.player.x, z = lv.player.z, h = lv.player.a * Math.PI / 180, v = 0, gear = 'D';
+var car = CFG.CAR, dt = 1 / 60;
+
+/* 规划侧仿真：与 solver.expand 同一积分（PULSE）与段内回正斜坡。
+ * 此前这里复刻的是 v1.1 前的"车中心沿航向推进"模型，与现行后轴参考积分
+ * 必然发散，诊断结论失真——现直接调用 PULSE，杜绝第三份模型拷贝 */
+var st = { x: lv.player.x, z: lv.player.z, h: lv.player.a * Math.PI / 180, v: 0, steer: 0, gear: 'D' };
 var plan = [];
 segs.forEach(function (ac, si) {
-  var shifted = ac.g !== gear && si > 0; // 与 expand 一致：出生直接按第一段档位
-  if (si === 0) gear = ac.g;
-  if (shifted) {
-    var vB = vr, dB = gear === 'R' ? -1 : 1;
-    for (var bi = 0; bi < 40; bi++) {
-      x += dB * vB * Math.sin(h) * dt; z += dB * vB * Math.cos(h) * dt;
-      vB -= CFG.PHYS.brake * 0.8 * dt;
-      if (vB <= 0) break;
-    }
+  if (si === 0) st.gear = ac.g;
+  else if (st.gear !== ac.g) {
+    var guard = 80;
+    while (Math.abs(st.v) > 1e-3 && guard-- > 0) PULSE.brakeStep(st, dt, CFG.PHYS);
+    st.gear = ac.g;
   }
   var steps = Math.round(ac.dur / dt);
-  var target = ac.sf * car.maxSteer;
-  var up = target !== 0 ? Math.max(1, Math.ceil(Math.abs(target) / rate / dt)) : 0;
-  var down = target !== 0 ? Math.max(1, Math.ceil(Math.abs(target) / CFG.PHYS.centerRate / dt)) : 0;
-  var isStart = si === 0;
-  var vv = (shifted || isStart) ? 0 : vr;
-  var sgn = Math.sign(target);
+  var downSteps = ac.sf !== 0 ? Math.max(1, Math.ceil(Math.abs(ac.sf) * car.maxSteer / CFG.PHYS.centerRate / dt)) : 0;
   for (var i = 0; i < steps; i++) {
-    var steer;
-    if (i < up) steer = sgn * Math.min(Math.abs(target), (i + 1) * rate * dt);
-    else if (i >= steps - down) steer = sgn * Math.max(0, Math.abs(target) - (i - (steps - down) + 1) * CFG.PHYS.centerRate * dt);
-    else steer = target;
-    if (shifted || isStart) vv = Math.min(vr, vv + acc * dt);
-    var dir = ac.g === 'R' ? -vv : vv;
-    h += dir / car.wheelbase * Math.tan(steer) * dt;
-    x += dir * Math.sin(h) * dt; z += dir * Math.cos(h) * dt;
-    plan.push([x, z, h, vv, steer]);
+    var isDown = i >= steps - downSteps && ac.sf !== 0;
+    PULSE.stepMotion(st, isDown ? 0 : ac.sf, dt, CFG.PHYS, car);
+    plan.push([st.x, st.z, st.h, st.v, st.steer]);
   }
-  gear = ac.g;
 });
 
-/* 执行器复刻（与 autopilot.js 逻辑一致） */
+/* 执行侧：玩家实车模型 CarPhysics 按同样控制段给输入（drive 按档位给满；
+ * CarPhysics 对反向输入自带"先刹后驱"，档位切换处与真车松刹换挡手感一致） */
 var carP = new PHYS.CarPhysics({ car: car, phys: CFG.PHYS }, { x: lv.player.x, z: lv.player.z, heading: lv.player.a * Math.PI / 180 });
-carP.gear = segs[0].g;
-var segIdx = 0, stepLeft = Math.round(segs[0].dur / dt), exec = [];
-for (var it = 0; it < 50000 && segIdx < segs.length; it++) {
-  var seg = segs[segIdx];
-  if (carP.gear !== seg.g) {
-    if (Math.abs(carP.speed) > 0.05) carP.update(dt, { brake: 1, steer: 0 });
-    else { carP.setGear(seg.g); carP.update(dt, { brake: 1, steer: 0 }); }
-  } else {
-    var downSteps = Math.ceil(Math.abs(seg.sf) * car.maxSteer / CFG.PHYS.centerRate / dt);
-    var rd = stepLeft <= downSteps && seg.sf !== 0;
-    carP.update(dt, { throttle: 0, brake: 0, steer: rd ? 0 : seg.sf });
-    stepLeft--;
-    if (stepLeft <= 0) { segIdx++; if (segIdx < segs.length) stepLeft = Math.round(segs[segIdx].dur / dt); }
+var exec = [];
+segs.forEach(function (ac) {
+  var steps = Math.round(ac.dur / dt);
+  var downSteps = ac.sf !== 0 ? Math.max(1, Math.ceil(Math.abs(ac.sf) * car.maxSteer / CFG.PHYS.centerRate / dt)) : 0;
+  for (var i = 0; i < steps; i++) {
+    var isDown = i >= steps - downSteps && ac.sf !== 0;
+    carP.update(dt, { drive: ac.g === 'R' ? -1 : 1, steer: isDown ? 0 : ac.sf });
+    exec.push([carP.x, carP.z, carP.heading, carP.speed, carP.steer]);
   }
-  exec.push([carP.x, carP.z, carP.heading, carP.speed, carP.steer]);
-}
+});
 
 console.log('plan 步数', plan.length, 'exec 步数', exec.length);
 console.log('plan 终点 (', plan[plan.length - 1].slice(0, 2).map(function (q) { return q.toFixed(2); }), ')');

@@ -17,26 +17,6 @@ var PULSE = require(path.join(JS, 'pulse.js'));
 
 var Heap = require("./heap-shim.js");
 
-function HeapUnused() { this.a = []; }
-Heap.prototype.push = function (n) {
-  var a = this.a; a.push(n); var i = a.length - 1;
-  while (i > 0) { var p = (i - 1) >> 1; if (a[p].f <= a[i].f) break; var t = a[p]; a[p] = a[i]; a[i] = t; i = p; }
-};
-Heap.prototype.pop = function () {
-  var a = this.a, top = a[0], last = a.pop();
-  if (a.length) {
-    a[0] = last; var i = 0;
-    for (;;) {
-      var l = 2 * i + 1, r = l + 1, m = i;
-      if (l < a.length && a[l].f < a[m].f) m = l;
-      if (r < a.length && a[r].f < a[m].f) m = r;
-      if (m === i) break;
-      var t = a[m]; a[m] = a[i]; a[i] = t; i = m;
-    }
-  }
-  return top;
-};
-
 
 function wrapDegRad(d) { while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
 
@@ -74,8 +54,7 @@ function solve(level, opt) {
   }
 
   /* ---- 控制段基元（与执行器同模型） ---- */
-  var dt = 1 / 60, L = car.wheelbase;
-  var rate = CFG.PHYS.steerRate, acc = CFG.PHYS.accel * 0.35, vr = CFG.PHYS.creep;
+  var dt = 1 / 60;
   var actions = [];
   [0.6, -0.6].forEach(function (sf) {
     [0.7, 1.0, 1.6, 2.4].forEach(function (dur) {
@@ -185,8 +164,6 @@ function solve(level, opt) {
 
   /** 末端暴力搜索：从当前状态用 1-2 个连续时长脉冲精确落位 */
   function endgameBrute(startNode) {
-    var bestSeen = Infinity;
-    var cnt = { calls: 0, nulls: 0, singles: 0 };
     var sfs = [-1, -0.8, -0.6, -0.5, -0.4, -0.2, 0, 0.2, 0.4, 0.5, 0.6, 0.8, 1];
     var durs = [];
     for (var d = 0.4; d <= 2.61; d += 0.075) durs.push(Math.round(d * 1000) / 1000);
@@ -208,7 +185,7 @@ function solve(level, opt) {
       var dx = spotJ.x - n.x, dz = spotJ.z - n.z;
       var along = dx * Math.sin(n.h) + dz * Math.cos(n.h);
       var g = along >= 0 ? 'D' : 'R';
-      var dur = Math.abs(along) / CFG.PHYS.creep;
+      var dur = Math.abs(along) / CFG.PHYS.demoSpeed;
       var out = segsSoFar.concat([{ g: g, sf: 0, dur: Math.round(dur * 100) / 100 }]);
       return { ok: true, segs: out };
     }
@@ -225,11 +202,13 @@ function solve(level, opt) {
       }
     }
     /* 双脉冲 */
+    var bruteExp = 0;
     for (gi = 0; gi < gears.length; gi++) {
       var ga = gears[gi];
       for (var sia = 0; sia < sfs.length; sia++) {
         for (var dia = 0; dia < durs.length; dia++) {
           var na = expand(startNode, { g: ga, sf: sfs[sia], dur: durs[dia] });
+          if (++bruteExp % 200000 === 0) process.stderr.write('  endgame 双脉冲已展开 ' + bruteExp + ' 次...\n');
           if (!na) continue;
           na.lastSf = sfs[sia];
           for (var gj = 0; gj < gears.length; gj++) {
@@ -252,6 +231,7 @@ function solve(level, opt) {
       for (var si1 = 0; si1 < sfs.length; si1++) {
         for (var di1 = 0; di1 < durs.length; di1++) {
           var nA = expand(startNode, { g: g1b, sf: sfs[si1], dur: durs[di1] });
+          if (++bruteExp % 200000 === 0) process.stderr.write('  endgame 三脉冲已展开 ' + bruteExp + ' 次...\n');
           if (!nA) continue;
           nA.lastSf = sfs[si1];
           for (var gj1 = 0; gj1 < gears.length; gj1++) {

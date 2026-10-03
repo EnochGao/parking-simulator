@@ -25,7 +25,8 @@
     var PULSE;
     if (typeof module === 'object' && module.exports) PULSE = require('./pulse.js');
     else PULSE = window.PS.Pulse;
-    var st = { x: startPose.x, z: startPose.z, h: startPose.h, v: 0, steer: 0, gear: segs[0].g };
+    if (!segs || !segs.length) segs = [];   // 无标准答案：退化为持续刹车的空重放器，调用方不 crash
+    var st = { x: startPose.x, z: startPose.z, h: startPose.h, v: 0, steer: 0, gear: segs.length ? segs[0].g : 'D' };
     var segIdx = 0, stepLeft = Math.round(segs[0].dur / dt), segsDone = false;
     function step(dt2) {
       if (segIdx >= segs.length) { segsDone = true; PULSE.brakeStep(st, dt2, CFG_.PHYS); return st; }

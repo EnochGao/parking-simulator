@@ -318,6 +318,7 @@
         cam: cam, rt: rt, plane: plane, mat: mat, grp: grp,
         camYaw0: camYawDeg * D2R, camPitch0: (camPitchDeg || 0) * D2R,
         hideExtra: hideExtra || [],
+        _extraVis: [],   // hideExtra 各项可见性的复用槽位（镜面渲染前暂存、渲染后恢复）
         adjYaw: 0, adjPitch: 0,
         apply: function () {
           grp.rotation.y = yawDeg * D2R + m.adjYaw;
@@ -331,7 +332,7 @@
     }
 
     // 左外后视镜（驾驶员侧 +x）：玻璃中心伸出车侧 0.143m（GB 15084 Ⅲ类标定：
-    // 反射面 260×145mm ≥ 下限 170×70mm），高度取腰线处、纵向贴前门前缘（A 柱后方）；
+    // 反射面 260×145mm ≥ 下限 130×40mm），高度取腰线处、纵向贴前门前缘（A 柱后方）；
     // 相机置于车身外朝后偏外看，镜中可见封闭车身侧面与后轮（真实参照）
     makeMirror({ x: 0.99, y: 1.06, z: 0.82 }, { x: 1.07, y: 1.05, z: 0.80 }, -147, -24, [0.26, 0.145], true, EXT_FOV, -4);
     // 右外后视镜（副驾侧 -x）：与左侧完全对称（真车左右对称；前进视野中位于视野边缘
@@ -387,43 +388,53 @@
     // 水平镜像：呈现"回头看"的直觉视图（画面右＝车右后方），与真实倒车影像一致
     revPlane.scale.x = -1;
 
+    /* 可见性保存区（render 复用，pairs: [obj, visible, obj, visible, ...]）：
+     * 只存 hideInMirror 公共隐藏项（内饰组 + 内镜壳/遮罩），集合建镜后固定，
+     * 复用同一数组消除行车期间稳态 GC。各镜专属隐藏项不走这里——
+     * 其可见性暂存在各镜预分配的 _extraVis 平行槽位，避免两路共用一处导致配对错位 */
+    var savedVis = [];
+
     function render(renderer, scene, revOn) {
       // 倒车影像：整车隐藏，画面干净；重绘条件与屏体显隐保持同一判断
       //（revOn 由 game.js 按 assist.revCam && gear==='R' && !assist.top 传入）
+      var carVis = carGroup.visible;
       if (revOn !== false) {
         carGroup.visible = false;
         renderer.setRenderTarget(revRt);
         renderer.render(scene, revCam);
       }
       // 后视镜：隐藏内饰，保留外观与舱玻璃 → 镜中可见封闭车身侧面与后轮（真实参照）
-      var saved = [];
+      savedVis.length = 0;
       for (var k = 0; k < hideInMirror.length; k++) {
-        saved.push([hideInMirror[k], hideInMirror[k].visible]);
+        savedVis.push(hideInMirror[k], hideInMirror[k].visible);
         hideInMirror[k].visible = false;
       }
       // 隐藏镜面本身：渲染镜面画面时镜面在车组内可见会采样自己的渲染目标（feedback loop）
       for (var p = 0; p < mirrors.length; p++) mirrors[p].plane.visible = false;
-      // 各镜专属隐藏项（如车内镜隐藏车顶板）：保存 → 隐藏 → 渲染后恢复
-      for (var e = 0; e < mirrors.length; e++) {
-        var extras = mirrors[e].hideExtra;
-        for (var e2 = 0; e2 < extras.length; e2++) {
-          saved.push([extras[e2], extras[e2].visible]);
-          extras[e2].visible = false;
-        }
-      }
       carGroup.visible = true;
       for (var i = 0; i < mirrors.length; i++) {
-        renderer.setRenderTarget(mirrors[i].rt);
-        renderer.render(scene, mirrors[i].cam);
+        var m = mirrors[i], extras = m.hideExtra;
+        // 各镜专属隐藏项（如车内镜隐藏车顶板）只在本镜的渲染窗口内生效，渲染后立即恢复——
+        // 否则外镜画面也会丢失自家车顶（外镜相机在车外，本应看到车顶板边缘）
+        for (var e = 0; e < extras.length; e++) {
+          m._extraVis[e] = extras[e].visible;
+          extras[e].visible = false;
+        }
+        renderer.setRenderTarget(m.rt);
+        renderer.render(scene, m.cam);
+        for (var e2 = 0; e2 < extras.length; e2++) extras[e2].visible = m._extraVis[e2];
       }
       for (var q = 0; q < mirrors.length; q++) mirrors[q].plane.visible = true;
-      // 恢复隐藏对象的可见性：否则内饰只渲染一帧便永久消失（方向盘/仪表台不见了）
-      for (var r = 0; r < saved.length; r++) saved[r][0].visible = saved[r][1];
+      // 恢复公共隐藏对象的可见性（savedVis 恒为偶数长度，对象在偶数位）：
+      // 否则内饰只渲染一帧便永久消失（方向盘/仪表台不见了）
+      for (var r = savedVis.length - 2; r >= 0; r -= 2) savedVis[r].visible = savedVis[r + 1];
+      carGroup.visible = carVis;
       renderer.setRenderTarget(null);
     }
 
     return {
       mirrors: mirrors,
+      hideInMirror: hideInMirror,   // 所有镜面渲染时统一隐藏的对象（自测需读取验证可见性恢复）
       revCam: revCam,
       revPlane: revPlane,
       revRt: revRt,
