@@ -7,6 +7,20 @@
   var D2R = Math.PI / 180;
   var DT = 1 / 60;
 
+  /* 深度释放一棵对象树的 GPU 资源：three.js 里 scene.remove 只解除场景引用，
+   * 几何体/材质不显式 dispose 会一直滞留显存——每次换关/重开都重建整车+座舱，
+   * 不释放则反复游玩持续累积。只释放几何体与材质本身；材质引用的贴图
+   * （如模块级缓存的仪表 CanvasTexture）生命周期独立，不在此处置。 */
+  function disposeDeep(root) {
+    root.traverse(function (o) {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        var mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (var i = 0; i < mats.length; i++) mats[i].dispose();
+      }
+    });
+  }
+
   function Game(container) {
     var PS = window.PS;
     this.PS = PS;
@@ -75,6 +89,14 @@
     this.guide = null;
     this.acc = 0; // 固定步长累加器
     this.autopilotActive = false;
+    /* 镜面/倒影 RT 脏检查（见 render）：静止泊车时不重绘 3 面镜 + 倒影共 4 遍场景 */
+    this._mirrorsDirty = false;
+    this._lastBrakeCol = 0; this._lastIndL = 0; this._lastIndR = 0;
+    this._lastRevOn = null; this._lastRevSteer = 0;
+    this._viewAspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+    this._guidePaths = null;  // 引导线轨迹缓存（按关卡 id，确定性输出）
+    /* 整帧门控（见 render）：菜单/简报/暂停/结算等叠加态场景静止，跳过整帧渲染 */
+    this._frameDirty = true;  // 初始至少画一帧，主菜单背后才是天空色而非黑屏
 
     this.bindInput();
     // 手柄（盖世小鸡等标准布局）：逐帧轮询 Gamepad API，驾驶输入与菜单导航
@@ -82,9 +104,11 @@
     var self = this;
     this.onResize = function () {
       var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+      self._viewAspect = w / h;
       self.renderer.setSize(w, h);
       self.camera.aspect = w / h;
       self.camera.updateProjectionMatrix();
+      self._frameDirty = true;   // 画布已换新缓冲，叠加层背后的最后一帧必须补画
     };
     window.addEventListener('resize', this.onResize);
     // 从后台/被遮挡状态回到前台时重设画布（加载时尺寸为 0 的自愈）
@@ -151,7 +175,11 @@
     if (!lv) return;
     if (this.worldH) { this.worldH.dispose(); this.worldH = null; }
     if (this.guide) { this.guide.dispose(); this.guide = null; }
-    if (this.car) { this.scene.remove(this.car.group); this.car = null; }
+    if (this.car) {
+      disposeDeep(this.car.group);   // 先释放 GPU 资源（scene.remove 不回收显存）
+      this.scene.remove(this.car.group);
+      this.car = null;
+    }
     this.level = lv;
     this.mode = mode || 'play';
 
@@ -203,9 +231,14 @@
     });
     this.obDefs = PS.Levels.getObstacleObbs(lv);
 
-    /* 引导线：标准答案轨迹（重放一次得到） */
-    var res = PS.Autopilot.runLevel(lv, { record: true });
-    this.guide = PS.Assist.createGuideLine(this.scene, res.path);
+    /* 引导线：标准答案轨迹。重放是确定性的 → 按关卡缓存，重开/再进不再无头重放整关 */
+    this._guidePaths = this._guidePaths || {};
+    var path = this._guidePaths[lv.id];
+    if (!path) {
+      var res = PS.Autopilot.runLevel(lv, { record: true });
+      path = this._guidePaths[lv.id] = res.path;
+    }
+    this.guide = PS.Assist.createGuideLine(this.scene, path);
     this.guide.setVisible(this.assist.guide);
 
     this.time = 0; this.collisions = 0; this.wasColliding = false;
@@ -213,6 +246,9 @@
     this.stopTimer = 0; this.indicator.side = 0; this.indicator.peak = null;
     this._lastShadowPose = null;             // 新关卡车辆瞬移，强制刷新阴影
     this._mirrorsDirty = true;               // 新关卡强制渲染一帧镜面/倒影 RT
+    this._frameDirty = true;                 // 新世界至少画一帧，简报叠加层背后才有画面
+    this._lastBrakeCol = 0; this._lastIndL = 0; this._lastIndR = 0;  // 新车灯色从灭态起步，强制首帧刷新
+    this._lastRevOn = null; this._lastRevSteer = 0;
     this.usingTop = false; this.assist.top = false;
     this.hud.showHud(lv);
     this.state = 'briefing';
@@ -337,6 +373,7 @@
           mir.adjYaw = PS.Physics.clamp(mir.adjYaw + dy * 0.7 * DT, -0.35, 0.35);   // ±20°
           mir.adjPitch = PS.Physics.clamp(mir.adjPitch + dp * 0.5 * DT, -0.26, 0.26); // ±15°
           mir.apply();
+          this._mirrorsDirty = true;   // 镜面/镜相机一起偏转，镜中画面已变
           this.mirrorAdj[this.mirrorSel] = { y: mir.adjYaw, p: mir.adjPitch };
         }
       } else {
@@ -371,14 +408,9 @@
         this.gpad.rumble(0.9, 0.5, this.cfg.GAMEPAD ? this.cfg.GAMEPAD.rumbleMs : 260); // 碰撞手柄震动
       }
       this.carP.bounce();
-      /* 位置修正：沿最小穿透方向逐次推出，避免车身嵌入障碍物（穿模） */
-      for (var it = 0; it < 5; it++) {
-        var obb2 = COL.carObb(this.carP.x, this.carP.z, this.carP.heading, this.cfg.CAR);
-        var hit2 = COL.firstHit(obb2, this.obstacles);
-        if (hit2 < 0) break;
-        var push = COL.minPushOut(obb2, this.obstacles[hit2]);
-        this.carP.x += push.dx; this.carP.z += push.dz;
-      }
+      /* 位置修正：沿最小穿透方向逐次推出，避免车身嵌入障碍物（穿模）
+       * ——与无头回归共用 collision.pushOut，两处行为不会漂移 */
+      COL.pushOut(this.carP, this.carP.heading, this.cfg.CAR, this.obstacles);
       if (this.autopilotActive && this.replay) {
         var st = this.replay.getSt();
         st.v = this.carP.speed; st.x = this.carP.x; st.z = this.carP.z;
@@ -386,13 +418,23 @@
     }
     this.wasColliding = hi >= 0;
 
-    /* 完成判定 */
-    var ev = this.PS.Scoring.evaluate({
-      x: this.carP.x, z: this.carP.z, heading: this.carP.heading,
-      spot: { x: this.level.spot.x, z: this.level.spot.z, angle: this.level.spot.a * D2R, w: this.level.spot.w, l: this.level.spot.l },
-      collisions: this.collisions, time: this.time, par: this.level.par,
-      carCfg: this.cfg.CAR, cfg: this.cfg.SCORE
-    });
+    /* 完成判定：先做距离粗筛，远离车位时跳过全量评分——evaluate 每步分配
+     * 多块临时数组（spotPoly/四角/结果对象），赶路阶段纯浪费。车中心要落在
+     * 车位多边形内，到车位中心距离必 ≤ max(半长,半宽)，再留 1m 余量 */
+    var spot = this.level.spot;
+    var dxs = this.carP.x - spot.x, dzs = this.carP.z - spot.z;
+    var reach = spot.l / 2 + spot.w / 2 + 1;
+    var ev;
+    if (dxs * dxs + dzs * dzs > reach * reach) {
+      ev = { completed: false, inside: false, posOffset: Math.sqrt(dxs * dxs + dzs * dzs) };
+    } else {
+      ev = this.PS.Scoring.evaluate({
+        x: this.carP.x, z: this.carP.z, heading: this.carP.heading,
+        spot: { x: spot.x, z: spot.z, angle: spot.a * D2R, w: spot.w, l: spot.l },
+        collisions: this.collisions, time: this.time, par: this.level.par,
+        carCfg: this.cfg.CAR, cfg: this.cfg.SCORE
+      });
+    }
     if (ev.completed && this.carP.isStopped()) {
       this.stopTimer += DT;
       if (this.stopTimer >= this.cfg.SCORE.stopTime) { this.finish(); return; }
@@ -485,13 +527,22 @@
       (this.input.drive === 0 && Math.abs(spd) > 0.05) ||
       (this.input.drive < 0 && spd > 0.05);
     var bl = braking ? this.car.brakeOn : this.car.brakeOff;
-    this.car.brakeLights.forEach(function (l) { l.material.color.setHex(bl); });
-    /* 转向灯闪烁 */
+    if (bl !== this._lastBrakeCol) {
+      this._lastBrakeCol = bl;
+      this.car.brakeLights.forEach(function (l) { l.material.color.setHex(bl); });
+      this._mirrorsDirty = true;   // 刹车灯入镜，色变才重绘镜面 RT
+    }
+    /* 转向灯闪烁（色变才写材质；闪烁沿/拨杆开关同时标脏镜面 RT） */
     this.indicator.timer += elapsed;
     var on = this.indicator.side !== 0 && (Math.floor(this.indicator.timer / 0.45) % 2 === 0);
-    var indColor = on ? this.car.indOn : this.car.indOff;
-    this.car.indicators.l.material.color.setHex(this.indicator.side === 1 && on ? indColor : this.car.indOff);
-    this.car.indicators.r.material.color.setHex(this.indicator.side === 2 && on ? indColor : this.car.indOff);
+    var lHex = (this.indicator.side === 1 && on) ? this.car.indOn : this.car.indOff;
+    var rHex = (this.indicator.side === 2 && on) ? this.car.indOn : this.car.indOff;
+    if (lHex !== this._lastIndL || rHex !== this._lastIndR) {
+      this._lastIndL = lHex; this._lastIndR = rHex;
+      this.car.indicators.l.material.color.setHex(lHex);
+      this.car.indicators.r.material.color.setHex(rHex);
+      this._mirrorsDirty = true;
+    }
     /* 转向灯自动回位熄灭：打过实方向（峰值>12°）后方向盘回到 ±4° 内，
      * 与真实车拨杆回位一致——防止新手打完灯忘关 */
     if (this.indicator.side) {
@@ -525,11 +576,13 @@
     if (!last || Math.abs(sp.x - last.x) > 1e-4 || Math.abs(sp.z - last.z) > 1e-4 ||
         Math.abs(sp.heading - last.h) > 1e-5) {
       this.renderer.shadowMap.needsUpdate = true;
+      this._mirrorsDirty = true;   // 镜面/倒影相机全挂车组：车身动 = 镜中画面变
       this._lastShadowPose = { x: sp.x, z: sp.z, h: sp.heading };
     }
 
-    /* 俯视相机跟随（垂直视域固定，水平随窗口宽高比扩展，避免画面拉伸失真） */
-    var topAspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+    /* 俯视相机跟随（垂直视域固定，水平随窗口宽高比扩展，避免画面拉伸失真）
+     * 宽高比用 resize 时缓存的 _viewAspect，不逐帧读 window 布局 */
+    var topAspect = this._viewAspect;
     var halfH = 10.5, halfW = Math.min(26, halfH * topAspect);
     this.topCamera.left = -halfW; this.topCamera.right = halfW;
     this.topCamera.top = halfH; this.topCamera.bottom = -halfH;
@@ -546,9 +599,16 @@
     if (this.mirrorH) {
       var revOn = this.assist.revCam && this.carP.gear === 'R' && !this.assist.top;
       this.mirrorH.revPlane.visible = revOn;
+      if (revOn !== this._lastRevOn) {
+        this._lastRevOn = revOn;
+        this._mirrorsDirty = true;   // 倒影屏点亮/熄灭各重绘一帧 RT（点亮时画面须新鲜）
+      }
       if (this.revGuide) {
         this.revGuide.setVisible(revOn);
         if (revOn) {
+          /* 引导线随前轮角弯曲：静止打轮时车身没动（姿态脏检查不触发），单独盯转角 */
+          if (Math.abs(this.carP.steer - this._lastRevSteer) > 1e-5) this._mirrorsDirty = true;
+          this._lastRevSteer = this.carP.steer;
           this.revGuide.update(
             { x: this.carP.x, z: this.carP.z, heading: this.carP.heading },
             this.cfg.CAR, this.carP.steer, this.radar);
@@ -558,6 +618,14 @@
   };
 
   Game.prototype.render = function () {
+    /* 整帧门控：仅 playing 态逐帧渲染。菜单/选关/简报/暂停/结算/自测态场景静止
+     * （阴影/镜面均已按需），且叠加层 82% 遮挡——跳过整帧渲染，画布保留最后一帧
+     * （不 render 时 canvas 内容不会消失），GPU 几乎零负载。
+     * resize/回前台/换关由 _frameDirty 强制补帧；playing 中断时遗留的
+     * _mirrorsDirty（如暂停中转向灯闪烁沿）会在恢复后的首帧补上 */
+    if (this.state === 'playing') this._frameDirty = true;
+    if (!this._frameDirty) return;
+    this._frameDirty = false;
     var cam = this.assist.top ? this.topCamera : this.camera;
     if (this.car) {
       // 座舱玻璃盒常显：主相机在盒体内部，FrontSide 背面剔除后不影响舱内视线；
@@ -568,9 +636,12 @@
     }
     if (this.assist.top) this._mirrorsDirty = true;   // 俯视期间镜面不渲染，回驾驶座强制刷新
     if (this.mirrorH && this.car && !this.assist.top) {
-      // 镜面/倒影 RT 仅在驾驶态逐帧渲染；简报/暂停/结算/菜单态场景静止（遮罩 82% 遮挡），
-      // 保留最后一帧即可——入口/换关时由 _mirrorsDirty 强制渲染一帧，菜单态渲染开销 -80%
-      if (this.state === 'playing' || this._mirrorsDirty) {
+      // 镜面/倒影 RT 按需渲染：updateVisuals 在车身位移/转向、刹车灯/转向灯色变、
+      // 倒影屏点亮、打轮改引导线、V 调镜时置 _mirrorsDirty——静止泊车时场景对
+      // 镜面相机逐像素不变，跳过 3 面镜 + 倒影共 4 遍场景渲染（泊车大部分时间静止）；
+      // 简报/暂停/结算/菜单态场景静止（遮罩 82% 遮挡），同样只保留最后一帧——
+      // 入口/换关时由 loadLevel 置脏强制渲染一帧
+      if (this._mirrorsDirty) {
         // 倒影画面重绘与倒影屏显隐（updateVisuals）保持同一条件：R 挡且倒影开关开启
         var revOn = this.assist.revCam && this.carP.gear === 'R';
         this.mirrorH.render(this.renderer, this.scene, revOn);

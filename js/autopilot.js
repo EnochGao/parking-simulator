@@ -85,14 +85,8 @@
         // 撞击衰减（与 CarPhysics.bounce 一致）
         S.v = -S.v * CFG_.PHYS.bounceFactor;
         if (Math.abs(S.v) < 0.25) S.v = 0;
-        // 位置修正：推出障碍物，避免嵌入穿模（与游戏内主循环逻辑一致）
-        for (var it = 0; it < 5; it++) {
-          var obb2 = COL.carObb(S.x, S.z, S.h, cfg);
-          var hi2 = COL.firstHit(obb2, obstacles);
-          if (hi2 < 0) break;
-          var push = COL.minPushOut(obb2, obstacles[hi2]);
-          S.x += push.dx; S.z += push.dz;
-        }
+        // 位置修正：推出障碍物，避免嵌入穿模（与游戏内主循环共用 collision.pushOut）
+        COL.pushOut(S, S.h, cfg, obstacles);
       }
       wasColliding = hi >= 0;
 

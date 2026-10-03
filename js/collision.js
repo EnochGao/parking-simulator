@@ -29,31 +29,38 @@
     ];
   }
 
-  function projectAxis(pts, ax, az) {
-    var min = Infinity, max = -Infinity;
-    for (var i = 0; i < pts.length; i++) {
-      var p = pts[i][0] * ax + pts[i][1] * az;
-      if (p < min) min = p;
-      if (p > max) max = p;
-    }
-    return [min, max];
+  /* SAT 轴缓存（模块级复用；Node/浏览器均单线程）：4 条测试轴 = a 的右/前轴 + b 的右/前轴 */
+  var AXES = new Float64Array(8);
+  function setAxes(a, b) {
+    var ac = Math.cos(a.angle), as = Math.sin(a.angle);
+    var bc = Math.cos(b.angle), bs = Math.sin(b.angle);
+    AXES[0] = ac; AXES[1] = -as;   // a 右
+    AXES[2] = as; AXES[3] = ac;    // a 前
+    AXES[4] = bc; AXES[5] = -bs;   // b 右
+    AXES[6] = bs; AXES[7] = bc;    // b 前
   }
 
-  function overlap1D(a, b) { return a[0] <= b[1] && b[0] <= a[1]; }
+  /** 盒沿单位轴 (ax,az) 的投影半宽 = hw|轴·右| + hl|轴·前|。
+   *  中心对称盒的投影区间 = 中心投影 ∓ 半宽，可解析计算——
+   *  SAT 热路径因此零数组分配（旧实现每次现算两盒 4 角点再逐点投影） */
+  function projHalf(ax, az, o) {
+    var c = Math.cos(o.angle), s = Math.sin(o.angle);
+    return o.hw * Math.abs(c * ax - s * az) + o.hl * Math.abs(s * ax + c * az);
+  }
+
+  /** 两盒在单位轴 (ax,az) 上的投影重叠量；< 0 = 在该轴分离（SAT 可提前退出）。
+   *  == 0 为恰好接触，沿用旧 overlap1D 的 <= 语义：算相交 */
+  function axisOverlap(ax, az, a, b) {
+    var ea = projHalf(ax, az, a), eb = projHalf(ax, az, b);
+    var ca = a.x * ax + a.z * az, cb = b.x * ax + b.z * az;
+    return Math.min(ca + ea, cb + eb) - Math.max(ca - ea, cb - eb);
+  }
 
   /** SAT：两 OBB 是否相交 */
   function obbOverlap(a, b) {
-    var ca = corners(a), cb = corners(b);
-    var axes = [
-      [Math.cos(a.angle), -Math.sin(a.angle)],
-      [Math.sin(a.angle), Math.cos(a.angle)],
-      [Math.cos(b.angle), -Math.sin(b.angle)],
-      [Math.sin(b.angle), Math.cos(b.angle)]
-    ];
+    setAxes(a, b);
     for (var i = 0; i < 4; i++) {
-      var pa = projectAxis(ca, axes[i][0], axes[i][1]);
-      var pb = projectAxis(cb, axes[i][0], axes[i][1]);
-      if (!overlap1D(pa, pb)) return false;
+      if (axisOverlap(AXES[i * 2], AXES[i * 2 + 1], a, b) < 0) return false;
     }
     return true;
   }
@@ -97,24 +104,34 @@
    * 返回 {dx, dz, depth}；两 OBB 不相交时 depth=0。
    */
   function minPushOut(a, b) {
-    var ca = corners(a), cb = corners(b);
-    var axes = [
-      [Math.cos(a.angle), -Math.sin(a.angle)],
-      [Math.sin(a.angle), Math.cos(a.angle)],
-      [Math.cos(b.angle), -Math.sin(b.angle)],
-      [Math.sin(b.angle), Math.cos(b.angle)]
-    ];
+    setAxes(a, b);
     var best = Infinity, bx = 0, bz = 0;
     for (var i = 0; i < 4; i++) {
-      var ax = axes[i][0], az = axes[i][1];
-      var pa = projectAxis(ca, ax, az), pb = projectAxis(cb, ax, az);
-      var ovl = Math.min(pa[1], pb[1]) - Math.max(pa[0], pb[0]);
+      var ax = AXES[i * 2], az = AXES[i * 2 + 1];
+      var ovl = axisOverlap(ax, az, a, b);
       if (ovl <= 0) return { dx: 0, dz: 0, depth: 0 };
       // 以投影区间中点决定推出方向（稳定，避免中心重合时抖动）
-      var s = (pa[0] + pa[1]) >= (pb[0] + pb[1]) ? 1 : -1;
-      if (ovl < best) { best = ovl; bx = ax * s; bz = az * s; }
+      var sgn = (a.x * ax + a.z * az) >= (b.x * ax + b.z * az) ? 1 : -1;
+      if (ovl < best) { best = ovl; bx = ax * sgn; bz = az * sgn; }
     }
     return { dx: bx * best, dz: bz * best, depth: best };
+  }
+
+  /**
+   * 碰撞位置修正：沿最小穿透方向逐次推出，避免车身嵌入障碍物（穿模）。
+   * 游戏内 postStep 与无头回归（autopilot）共用同一实现，两处行为不会漂移。
+   * pose: {x,z}（就地修改）；heading 弧度；最多尝试 5 次推出。
+   */
+  function pushOut(pose, heading, carCfg, obstacles) {
+    for (var it = 0; it < 5; it++) {
+      var obb = carObb(pose.x, pose.z, heading, carCfg);
+      var hi = firstHit(obb, obstacles);
+      if (hi < 0) break;
+      var push = minPushOut(obb, obstacles[hi]);
+      pose.x += push.dx;
+      pose.z += push.dz;
+    }
+    return pose;
   }
 
   return {
@@ -125,6 +142,7 @@
     pointInConvex: pointInConvex,
     carInsidePoly: carInsidePoly,
     firstHit: firstHit,
-    minPushOut: minPushOut
+    minPushOut: minPushOut,
+    pushOut: pushOut
   };
 });

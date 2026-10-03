@@ -20,7 +20,7 @@
     ground.position.set((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
     ground.receiveShadow = true;
     group.add(ground);
-    disposables.push(groundMat);
+    disposables.push(ground.geometry, groundMat);
 
     /* --- 车位标线（现实风格：白色边线，入口侧开口，无填充） --- */
     (function () {
@@ -51,10 +51,24 @@
     var poleM = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
     disposables.push(concreteM, brickM, winM, grassM, poleM);
 
+    // 停放车按颜色建一次模板、其余 clone（clone 共享几何体/材质实例，颜色仅 8 种）：
+    // 同关多辆同色车不再各自新建并各自上传一份相同的几何体
+    var parkedTpls = {};
     level.obstacles.forEach(function (o, idx) {
       var a = (o.a || 0) * D2R;
       if (o.t === 'car') {
-        var pc = PS.CarModel.buildParkedCar(null, idx * 7 + 3);
+        var seed = idx * 7 + 3;
+        var ci = seed % PS.CarModel.COLORS.length;   // 与 buildParkedCar 的取色同式
+        var tpl = parkedTpls[ci];
+        if (!tpl) {
+          tpl = parkedTpls[ci] = PS.CarModel.buildParkedCar(null, seed);
+          // 模板的几何/材质登记一次（clone 共享同一实例，销毁时随 disposables 释放）
+          tpl.traverse(function (n) {
+            if (n.geometry) disposables.push(n.geometry);
+            if (n.material) disposables.push(n.material);
+          });
+        }
+        var pc = tpl.clone();
         pc.position.set(o.x, 0, o.z);
         pc.rotation.y = a;
         group.add(pc);
@@ -96,7 +110,7 @@
         bm2.position.set(o.x, 0.5, o.z);
         bm2.castShadow = true;
         group.add(bm2);
-        disposables.push(bm2.geometry);
+        disposables.push(bm2.geometry, bm2.material);
       }
     });
 
