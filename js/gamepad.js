@@ -112,12 +112,18 @@
       if (edge(p, BTN.LEFT)) game.mirrorMode = true;
       if (edge(p, BTN.START)) game.pause();
 
-      /* LB/RB 按住转头看镜（与键盘 Z/X 同语义；松开仅在未被键盘接管时清零） */
-      var look = down(p, BTN.LB) ? 1 : (down(p, BTN.RB) ? 2 : 0);
-      if (look !== gpLook) {
-        if (look) game.lookHeld = look;
-        else if (game.lookHeld === gpLook) game.lookHeld = 0;
-        gpLook = look;
+      /* LB/RB：俯视时按住旋转镜头（左=画面逆时针，手动后暂停自动跟随，R 键回正）；
+       * 舱内时按住转头看镜（与键盘 Z/X 同语义；松开仅在未被键盘接管时清零） */
+      if (game.assist.top) {
+        if (down(p, BTN.LB)) game.rotateTopCamera(-game.cfg.VIEW_TOP.rotateRate * dt);
+        else if (down(p, BTN.RB)) game.rotateTopCamera(game.cfg.VIEW_TOP.rotateRate * dt);
+      } else {
+        var look = down(p, BTN.LB) ? 1 : (down(p, BTN.RB) ? 2 : 0);
+        if (look !== gpLook) {
+          if (look) game.lookHeld = look;
+          else if (game.lookHeld === gpLook) game.lookHeld = 0;
+          gpLook = look;
+        }
       }
     }
 

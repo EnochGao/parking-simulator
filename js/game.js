@@ -84,6 +84,10 @@
     this._tips = [];                       // 本关教学要点（loadLevel 填充）
     this._hudState = { time: 0, collisions: 0, gear: 'D', speed: 0, radar: null, radarRange: 2.5, hint: '', assistText: '' };
     this._topOn = false;     // 俯视开关沿：开启瞬间刷新一次俯视投影矩阵
+    this._topYaw = 0;        // 俯视镜头当前偏航（死区+阻尼跟随车头，见 updateVisuals）
+    this._topChase = false;  // 俯视回正进行中：偏出死区置位，回到对齐角锁正并复位
+    this._topManual = false; // 手动旋转过镜头：暂停自动跟随，R 回正恢复
+    this._topRot = 0;        // 键盘 ,/. 持续旋转方向（-1/0/1，keyup 清零）
     /* 镜面/倒影 RT 脏检查（见 render）：静止泊车时不重绘 3 面镜 + 倒影共 4 遍场景 */
     this._mirrorsDirty = false;
     this._lastRevOn = null; this._lastRevSteer = 0;
@@ -156,6 +160,9 @@
         case 'KeyC': self.toggleRevCam(); break;
         case 'KeyQ': self.indicator.side = self.indicator.side === 1 ? 0 : 1; break;
         case 'KeyE': self.indicator.side = self.indicator.side === 2 ? 0 : 2; break;
+        case 'Comma': self._topRot = -1; break;   // 俯视镜头左旋=画面逆时针（方向盘隐喻，与拖拽往左拉同向）
+        case 'Period': self._topRot = 1; break;   // 俯视镜头右旋=画面顺时针
+        case 'KeyR': if (self.assist.top) self.resetTopCamera(); break;
         case 'KeyZ': self.lookHeld = 1; break;  // 按住转头看左后视镜
         case 'KeyX': self.lookHeld = 2; break;  // 按住转头看右后视镜
         case 'Space': self.keys.space = true; e.preventDefault(); break;
@@ -173,7 +180,46 @@
       if (e.code === 'Space') self.keys.space = false;
       if (e.code === 'KeyZ' && self.lookHeld === 1) self.lookHeld = 0;
       if (e.code === 'KeyX' && self.lookHeld === 2) self.lookHeld = 0;
+      if (e.code === 'Comma' && self._topRot === -1) self._topRot = 0;
+      if (e.code === 'Period' && self._topRot === 1) self._topRot = 0;
     });
+
+    /* 俯视镜头手势：鼠标拖拽 / 触屏双指拧。抓地图手感——手往哪边拉/拧，画面跟着转
+     * （实测标定：yaw 增 = 画面顺时针；拖右/顺拧应让世界顺时针，故取正增量） */
+    var canvas = this.renderer.domElement;
+    var drag = null, twist = null;
+    canvas.addEventListener('mousedown', function (e) {
+      if (e.button !== 0 || !self.assist.top || self.state !== 'playing') return;
+      drag = { x: e.clientX };
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.x;
+      drag.x = e.clientX;
+      self.rotateTopCamera(dx * self.cfg.VIEW_TOP.dragRate * Math.PI / 180);
+    });
+    window.addEventListener('mouseup', function () { drag = null; });
+    function twistAngle(t) {
+      return Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
+    }
+    canvas.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2 && self.assist.top && self.state === 'playing') {
+        twist = { a: twistAngle(e.touches), ids: [e.touches[0].identifier, e.touches[1].identifier] };
+        e.preventDefault();   // 拧动期间屏蔽浏览器双指缩放
+      } else twist = null;
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (!twist || e.touches.length !== 2 ||
+          e.touches[0].identifier !== twist.ids[0] || e.touches[1].identifier !== twist.ids[1]) return;
+      var a = twistAngle(e.touches), da = a - twist.a;
+      if (da > Math.PI) da -= 2 * Math.PI;    // 跨 ±π 跳变保护
+      if (da < -Math.PI) da += 2 * Math.PI;
+      twist.a = a;
+      self.rotateTopCamera(da);
+      e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { twist = null; });
+    canvas.addEventListener('touchcancel', function () { twist = null; });
   };
 
   /* ---------- 关卡装载 ---------- */
@@ -237,6 +283,7 @@
     this._frameDirty = true;                 // 新世界至少画一帧，简报叠加层背后才有画面
     this._lastRevOn = null; this._lastRevSteer = 0;
     this.usingTop = false; this.assist.top = false;
+    this._topYaw = 0; this._topChase = false; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
     this._tips = lv.tips || [];              // 无 tips 关不再每帧兜底新建空数组
     this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions });
     this.state = 'briefing';
@@ -523,10 +570,12 @@
   Game.prototype.updateHud = function () {
     var carP = this.run.car;
     var ev = this._lastEv || this.run.evaluate();
-    var assistKey = (this.assist.guide ? 1 : 0) | (this.assist.top ? 2 : 0) | (this.assist.revCam ? 4 : 0);
+    var assistKey = (this.assist.guide ? 1 : 0) | (this.assist.top ? 2 : 0) | (this.assist.revCam ? 4 : 0) | (this._topManual ? 8 : 0);
     if (assistKey !== this._assistKey) {
       this._assistKey = assistKey;
-      this._assistText = (this.assist.guide ? '引导✓' : '') + (this.assist.top ? ' 俯视✓' : '') + (this.assist.revCam ? ' 倒影✓' : '');
+      this._assistText = (this.assist.guide ? '引导✓' : '') +
+        (this.assist.top ? (this._topManual ? ' 俯视·手动 R回正' : ' 俯视✓') : '') +
+        (this.assist.revCam ? ' 倒影✓' : '');
     }
     // 无情境提示时轮播本关教学要点（每 6s 一条）
     var tips = this._tips;
@@ -584,11 +633,37 @@
      * 开启瞬间与 resize 时由 syncTopProjection 刷新（此前每帧无条件重算，即使从未进俯视） */
     if (this.assist.top !== this._topOn) {
       this._topOn = this.assist.top;
-      if (this._topOn) this.syncTopProjection();
+      if (this._topOn) {
+        this.syncTopProjection();
+        this._topYaw = carP.heading;  // 开启瞬间直接对齐车头，无开场旋转
+        this._topChase = false;
+      }
     }
     if (this.assist.top) {
+      /* 正向车操作：up 对齐车头，前进永远是"往上"。跟转带死区+阻尼——
+       * 小幅方向修正不转镜（世界基本静止，防晕）；偏出死区才平滑回正，
+       * 回到对齐角即锁正。手动旋转过（,/./LB/RB/拖拽/双指拧）则跟随挂起 */
+      var TC = this.cfg.VIEW_TOP, D2R = Math.PI / 180;
+      if (this._topRot) {
+        this._topYaw += this._topRot * TC.rotateRate * elapsed;
+        this._topManual = true;
+      }
+      if (!this._topManual) {
+        var yawDiff = carP.heading - this._topYaw;
+        while (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
+        while (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+        if (!this._topChase && Math.abs(yawDiff) > TC.deadZoneDeg * D2R) this._topChase = true;
+        if (this._topChase) {
+          if (Math.abs(yawDiff) < TC.settleDeg * D2R) {
+            this._topYaw = carP.heading;  // 对齐即锁正，避免渐进收敛的残余摆动
+            this._topChase = false;
+          } else {
+            this._topYaw += yawDiff * (1 - Math.exp(-TC.followRate * elapsed));
+          }
+        }
+      }
       this.topCamera.position.set(carP.x, 42, carP.z);
-      this.topCamera.up.set(0, 0, -1);
+      this.topCamera.up.set(Math.sin(this._topYaw), 0, Math.cos(this._topYaw));
       this.topCamera.lookAt(carP.x, 0, carP.z);
     }
 
@@ -625,6 +700,21 @@
     this.topCamera.left = -halfW; this.topCamera.right = halfW;
     this.topCamera.top = halfH; this.topCamera.bottom = -halfH;
     this.topCamera.updateProjectionMatrix();
+  };
+
+  /** 俯视镜头手动旋转（增量弧度）：键盘 ,/. 持续、手柄 LB/RB 持续、鼠标拖拽/双指拧按增量。
+   *  手动过即暂停自动跟随（用户选定的朝向优先），R 回正恢复 */
+  Game.prototype.rotateTopCamera = function (deltaRad) {
+    this._topYaw += deltaRad;
+    this._topManual = true;
+  };
+
+  /** 俯视镜头回正：对齐车头并恢复自动跟随 */
+  Game.prototype.resetTopCamera = function () {
+    if (!this.carP) return;
+    this._topYaw = this.carP.heading;
+    this._topChase = false;
+    this._topManual = false;
   };
 
   Game.prototype.render = function () {

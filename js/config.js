@@ -84,10 +84,17 @@
       stopTime: 1.5,        // 停稳判定时长
       maxCollisions: 5      // 强制失败碰撞数
     },
-    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 100, near: 0.12, far: 220 }
-    // fov: 主相机垂直视场角（72° 接近真实车内透视）；mirrorFov/inMirrorFov/revFov 统一为
+    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 100, near: 0.12, far: 220 },
+    // fov: 主相机垂直视场角（72°接近真实车内透视）；mirrorFov/inMirrorFov/revFov 统一为
     // "垂直视场角"约定，渲染宽高比取各自镜面/屏面的实际宽高比（见 cockpit.js），
     // 内镜 3.2:1 扁长镜片因此呈现宽幅后窗视野而非水平拉伸画面；
     // revFov 100（水平≈130°）：对标真实倒车影像的广角（130°+），保证车尾后 0.3m 起近地可见
+    VIEW_TOP: {
+      deadZoneDeg: 28,   // 俯视跟转死区：车头相对镜头偏转超过此角才启动回转（小幅修正不转镜，防晕）
+      settleDeg: 2,      // 回转至此偏差内视为对齐，锁正镜头
+      followRate: 7,     // 回转指数阻尼速率（1/s），越大跟得越紧
+      rotateRate: 2.4,   // 手动旋转速率（rad/s，≈140°/s）：键盘 ,/. 与手柄 LB/RB 按住持续旋转
+      dragRate: 0.35     // 鼠标拖拽灵敏度（°/px）：抓住地图拖动，拖满 1280px 宽约 450°
+    }
   };
 });

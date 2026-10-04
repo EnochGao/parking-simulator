@@ -137,7 +137,7 @@
       b2.onclick = onSelect;
       box.appendChild(b2);
       box.appendChild(el('p', 'menu-help',
-        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向（松开保持角度） · Q/E 转向灯<br>Z/X 按住看左右后视镜 · V 调后视镜角度 · H 引导线 · M 俯视图 · C 倒车影像 · Esc 暂停<br>🎮 手柄（XInput 模式）：左摇杆方向 · RT/LT 油门/倒车 · B 手刹 · X/Y 转向灯 · LB/RB 看镜 · Back 引导线 · Start 暂停<br>🎮 菜单中：摇杆/十字键移动 · A 确认 · B 返回 · 十字键↑↓ 俯视/倒影 · ← 调后视镜'));
+        'W/↑ 前进 · S/↓ 倒车 · 松开即刹车 · A/D 方向（松开保持角度） · Q/E 转向灯<br>Z/X 按住看左右后视镜 · V 调后视镜角度 · H 引导线 · M 俯视图（,/．旋转 · 拖拽画面 · R 回正）· C 倒车影像 · Esc 暂停<br>🎮 手柄（XInput 模式）：左摇杆方向 · RT/LT 油门/倒车 · B 手刹 · X/Y 转向灯 · LB/RB 看镜（俯视时旋转镜头） · Back 引导线 · Start 暂停<br>🎮 菜单中：摇杆/十字键移动 · A 确认 · B 返回 · 十字键↑↓ 俯视/倒影 · ← 调后视镜'));
       api.showScreen(box);
     };
 
