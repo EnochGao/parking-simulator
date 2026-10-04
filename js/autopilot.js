@@ -68,7 +68,7 @@
   function runLevel(level, opts) {
     deps();
     opts = opts || {};
-    var dt = opts.dt || 1 / 60;
+    var dt = opts.dt || CFG_.PHYS.fixedDt;   // 与游戏壳层同一固定步长（config 单源）
     var SC = CFG_.SCORE;
     var segs = opts.phasesOverride || (function () {
       var LVL = typeof module === 'object' && module.exports ? require('./levels.js') : window.PS.Levels;

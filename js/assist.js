@@ -107,8 +107,9 @@
     var best = Infinity;
     for (var i = 0; i < obstacles.length; i++) {
       var o = obstacles[i];
-      // 障碍静止：局部坐标变换的 cos/sin 每障碍只算一次（此前每个采样点重复算 3 遍）
-      var dh = Math.cos(-o.angle), dsh = Math.sin(-o.angle);
+      // 障碍静止：局部坐标变换的 cos/sin 直接读 OBB 预算缓存（makeObb/setObb 已存 ca/sa）
+      var dh = o.ca != null ? o.ca : Math.cos(-o.angle);        // cos(-a) = cos(a)
+      var dsh = o.sa != null ? -o.sa : Math.sin(-o.angle);      // sin(-a) = -sin(a)
       for (var k = -1; k <= 1; k++) { // 车尾左中右三点
         var px = rx + c * k * 0.6;
         var pz = rz - s * k * 0.6;

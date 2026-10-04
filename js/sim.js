@@ -65,7 +65,12 @@
       car: car, level: level,
       time: 0, collisions: 0,
       obstacles: obstacles, obDefs: obDefs,
-      _wasColliding: false, _lastColTime: -9, _stopTimer: 0
+      _wasColliding: false, _lastColTime: -9, _stopTimer: 0,
+      /* 60Hz 热路径复用对象：车辆 OBB（setObb 原地刷新）、远距占位评分、步结果。
+       * 调用方（game/autopilot/测试）均同步消费返回值，无人跨步保留——安全 */
+      _carO: COL.makeObb(0, 0, 0, CAR.width / 2, CAR.length / 2),
+      _farEv: { completed: false, inside: false, posOffset: 0 },
+      _res: { ev: null, hit: false, counted: false, obDef: null, completed: false, failed: false }
     };
 
     function evaluateNow() {
@@ -88,7 +93,7 @@
       run.time += dt;
 
       /* --- 碰撞：检测 → 冷却计次 → 反弹 → 推出 --- */
-      var obb = COL.carObb(car.x, car.z, car.heading, CAR);
+      var obb = COL.setObb(run._carO, car.x, car.z, car.heading, CAR.width / 2, CAR.length / 2);
       var hi = COL.firstHit(obb, obstacles);
       var obDef = null, counted = false;
       if (hi >= 0) {
@@ -108,7 +113,8 @@
       var dxs = car.x - spot.x, dzs = car.z - spot.z;
       var ev;
       if (dxs * dxs + dzs * dzs > reach * reach) {
-        ev = { completed: false, inside: false, posOffset: Math.sqrt(dxs * dxs + dzs * dzs) };
+        ev = run._farEv;
+        ev.posOffset = Math.sqrt(dxs * dxs + dzs * dzs);
       } else {
         ev = evaluateNow();
       }
@@ -129,7 +135,10 @@
         ev.stars = 0;
       }
 
-      return { ev: ev, hit: hi >= 0, counted: counted, obDef: obDef, completed: completed, failed: failed };
+      var res = run._res;
+      res.ev = ev; res.hit = hi >= 0; res.counted = counted;
+      res.obDef = obDef; res.completed = completed; res.failed = failed;
+      return res;
     };
 
     return run;

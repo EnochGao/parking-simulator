@@ -1,6 +1,8 @@
 /* 停车大师 ParkMaster 样式 */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #14161a; }
+/* 移动端浏览器工具栏收缩时的动态视口（iOS Safari 地址栏）；不支持 dvh 的回退 100% 已有 */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
 body { font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; color: #e8eaee; }
 #app, canvas { position: absolute; inset: 0; }
 
@@ -78,5 +80,40 @@ h2 { margin-bottom: 16px; }
 
 /* ---------- 手柄支持 ---------- */
 .gpad-focus { border-color: #6fd66f !important; box-shadow: 0 0 0 2px rgba(111,214,111,.55), 0 0 16px rgba(111,214,111,.35); transform: translateY(-1px); }
-.gpad-toast { position: absolute; top: 62px; left: 50%; transform: translate(-50%, -8px); padding: 8px 20px; background: rgba(20,24,30,.92); border: 1px solid #3a4150; border-radius: 999px; color: #cfe8cf; font-size: 14px; opacity: 0; transition: all .3s; pointer-events: none; z-index: 30; white-space: nowrap; }
+.gpad-toast { position: absolute; top: 62px; left: 50%; transform: translate(-50%, -8px); padding: 8px 20px; background: rgba(20,24,30,.92); border: 1px solid #3a3f4a; border-radius: 999px; color: #cfe8cf; font-size: 14px; opacity: 0; transition: all .3s; pointer-events: none; z-index: 30; white-space: nowrap; }
 .gpad-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 触屏虚拟控件（手机/平板；body.touch-mode 由 game.js 检测后添加） ---------- */
+body.touch-mode { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.touch-mode canvas { touch-action: none; }          /* 驾驶画布：禁手势缩放/滚动 */
+body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; }  /* 菜单：防双击缩放 */
+
+.touch-controls { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+.tc-btn { position: absolute; pointer-events: auto; touch-action: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 50%; background: rgba(20,24,30,.55); border: 1px solid #ffffff30;
+  color: #e8eaee; font-weight: 700; backdrop-filter: blur(2px); }
+.tc-btn small { position: absolute; bottom: 9px; font-size: 10px; font-weight: 400; opacity: .75; }
+.tc-btn.drive { width: 76px; height: 76px; font-size: 30px; }
+.tc-btn.drive:active { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
+.tc-btn.fn { width: 46px; height: 46px; font-size: 15px; }
+.tc-btn.fn.on { background: rgba(111,214,111,.4); border-color: #6fd66f; color: #c9f2cf; }
+/* 左下转向 / 右下油门-倒车-手刹（倒车在最外——泊车主操作）；env() 为刘海屏安全区 */
+.tc-a { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.tc-d { left: calc(104px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.tc-w { right: calc(104px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.tc-s { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.tc-space { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(116px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; font-size: 20px; }
+/* 右上功能列：暂停 + 引导线/俯视/倒影（避开 HUD 状态栏） */
+.tc-pause { right: calc(14px + env(safe-area-inset-right, 0px)); top: 64px; }
+.tc-h { right: calc(14px + env(safe-area-inset-right, 0px)); top: 118px; }
+.tc-m { right: calc(14px + env(safe-area-inset-right, 0px)); top: 170px; }
+.tc-c { right: calc(14px + env(safe-area-inset-right, 0px)); top: 222px; }
+/* 驾驶态 HUD 底部仪表簇上移避让虚拟键 */
+body.touch-mode .hud-bottom { bottom: calc(116px + env(safe-area-inset-bottom, 0px)); }
+body.touch-mode .cluster { transform: scale(.92); }
+/* 竖屏提示横幅（仅触屏+竖屏显示；横屏自动消失） */
+.tc-rotate { display: none; position: absolute; top: 14%; left: 50%; transform: translateX(-50%);
+  padding: 9px 20px; background: rgba(16,18,24,.85); border: 1px solid #3a3f4a; border-radius: 999px;
+  font-size: 14px; color: #ffe9a8; pointer-events: none; white-space: nowrap; }
+body.touch-mode.portrait .tc-rotate { display: block; }

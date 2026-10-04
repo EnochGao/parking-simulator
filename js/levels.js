@@ -16,6 +16,14 @@
   } else if (root && root.PS) {
     DEMO = root.PS.DEMO_PATHS || null;
   }
+  /* 车宽半值单源：从 config 取（浏览器加载序 config→levels 已保证；旧实现硬编码 0.847 与
+   * CAR.width 隐式耦合，换车宽时这里会悄悄漂移） */
+  var CAR_HALF_W = 0.847;
+  try {
+    var CFGMOD = (typeof module === 'object' && module.exports) ? require('./config.js')
+      : (root && root.PS && root.PS.CONFIG);
+    if (CFGMOD && CFGMOD.CAR) CAR_HALF_W = CFGMOD.CAR.width / 2;
+  } catch (e) { /* 保持兜底值 */ }
 
   function car(x, z, a) { return { t: 'car', x: x, z: z, a: a || 0 }; }
   function wall(x, z, a, len, wid, h) { return { t: 'wall', x: x, z: z, a: a, len: len, wid: wid || 0.4, h: h || 2.2 }; }
@@ -24,9 +32,9 @@
   function tree(x, z) { return { t: 'tree', x: x, z: z, a: 0 }; }
   function bin(x, z, a) { return { t: 'bin', x: x, z: z, a: a || 0 }; }
 
-  /* 车位邻居工具：把宽 w 的车位两侧摆上车（随位角度）；0.847 = 飞度车宽 1.694 的一半 */
+  /* 车位邻居工具：把宽 w 的车位两侧摆上车（随位角度）；邻车间距用 CAR_HALF_W（config 单源） */
   function neighbors(spot, gap) {
-    var a = spot.a * D2R, off = spot.w / 2 + 0.847 + (gap == null ? 0.05 : gap);
+    var a = spot.a * D2R, off = spot.w / 2 + CAR_HALF_W + (gap == null ? 0.05 : gap);
     var px = Math.cos(a), pz = -Math.sin(a);
     return [car(spot.x + px * off, spot.z + pz * off, spot.a),
             car(spot.x - px * off, spot.z - pz * off, spot.a)];

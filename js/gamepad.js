@@ -26,17 +26,18 @@
   /**
    * 键盘/手柄驾驶输入合并：键盘优先（数字量，老玩家习惯不变），手柄模拟量补位。
    * kSteer/kDrive: 键盘 -1..1（0=松开）；gp: {steer:number|null, drive:-1|0|1|null, handbrake:bool}
+   * out: 可选复用对象（驾驶热路径 60Hz，input.js 传入预分配对象）；缺省新建（测试/一次性调用）
    * 返回 {steer, drive, holdSteer, handbrake}；holdSteer=键盘与摇杆都松开时保持当前转角
    */
-  function mergeDrive(kSteer, kDrive, gp) {
+  function mergeDrive(kSteer, kDrive, gp, out) {
     gp = gp || {};
+    var m = out || {};
     var gSteer = gp.steer != null && gp.steer !== 0 ? gp.steer : 0;
-    return {
-      steer: kSteer !== 0 ? kSteer : gSteer,
-      drive: kDrive !== 0 ? kDrive : (gp.drive != null ? gp.drive : 0),
-      holdSteer: kSteer === 0 && gSteer === 0,
-      handbrake: !!gp.handbrake
-    };
+    m.steer = kSteer !== 0 ? kSteer : gSteer;
+    m.drive = kDrive !== 0 ? kDrive : (gp.drive != null ? gp.drive : 0);
+    m.holdSteer = kSteer === 0 && gSteer === 0;
+    m.handbrake = !!gp.handbrake;
+    return m;
   }
 
   var MENU_STATES = { menu: 1, select: 1, briefing: 1, result: 1, paused: 1, selftest: 1 };

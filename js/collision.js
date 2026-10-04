@@ -8,8 +8,21 @@
 
   function makeObb(x, z, angle, hw, hl) {
     // br = 包围圆半径：firstHit 用它做距离粗筛，SAT 前跳过远端障碍（每帧 ~60 次 × 全障碍）
-    return { x: x, z: z, angle: angle, hw: hw, hl: hl, br: Math.hypot(hw, hl) };
+    // ca/sa = 预算的 cos/sin(angle)：障碍静止、车辆 OBB 每步只转一次——
+    // SAT 每次重叠测试原本要现算 16 次三角函数（4 轴 × 2 盒 × cos+sin），缓存后归零
+    return { x: x, z: z, angle: angle, hw: hw, hl: hl, ca: Math.cos(angle), sa: Math.sin(angle), br: Math.hypot(hw, hl) };
   }
+
+  /** 原地刷新 OBB（热路径零分配）：车辆 OBB 每步挪动时复用同一对象（sim/pushOut） */
+  function setObb(o, x, z, angle, hw, hl) {
+    o.x = x; o.z = z; o.angle = angle; o.hw = hw; o.hl = hl;
+    o.ca = Math.cos(angle); o.sa = Math.sin(angle); o.br = Math.hypot(hw, hl);
+    return o;
+  }
+
+  /** 读缓存的 cos/sin（兼容手工构造、无 ca/sa 字段的 OBB） */
+  function obbCa(o) { return o.ca != null ? o.ca : (o.ca = Math.cos(o.angle)); }
+  function obbSa(o) { return o.sa != null ? o.sa : (o.sa = Math.sin(o.angle)); }
 
   function carObb(x, z, heading, carCfg) {
     return makeObb(x, z, heading, carCfg.width / 2, carCfg.length / 2);
@@ -17,7 +30,7 @@
 
   /** OBB 四角 [ [x,z] x4 ] */
   function corners(o) {
-    var c = Math.cos(o.angle), s = Math.sin(o.angle);
+    var c = obbCa(o), s = obbSa(o);
     // 局部 x 轴（右）= (c, -s)?  局部 z 轴（前）= (s, c)
     var fx = s, fz = c, rx = c, rz = -s;
     var hw = o.hw, hl = o.hl;
@@ -32,8 +45,8 @@
   /* SAT 轴缓存（模块级复用；Node/浏览器均单线程）：4 条测试轴 = a 的右/前轴 + b 的右/前轴 */
   var AXES = new Float64Array(8);
   function setAxes(a, b) {
-    var ac = Math.cos(a.angle), as = Math.sin(a.angle);
-    var bc = Math.cos(b.angle), bs = Math.sin(b.angle);
+    var ac = obbCa(a), as = obbSa(a);
+    var bc = obbCa(b), bs = obbSa(b);
     AXES[0] = ac; AXES[1] = -as;   // a 右
     AXES[2] = as; AXES[3] = ac;    // a 前
     AXES[4] = bc; AXES[5] = -bs;   // b 右
@@ -44,7 +57,7 @@
    *  中心对称盒的投影区间 = 中心投影 ∓ 半宽，可解析计算——
    *  SAT 热路径因此零数组分配（旧实现每次现算两盒 4 角点再逐点投影） */
   function projHalf(ax, az, o) {
-    var c = Math.cos(o.angle), s = Math.sin(o.angle);
+    var c = obbCa(o), s = obbSa(o);
     return o.hw * Math.abs(c * ax - s * az) + o.hl * Math.abs(s * ax + c * az);
   }
 
@@ -121,10 +134,12 @@
    * 碰撞位置修正：沿最小穿透方向逐次推出，避免车身嵌入障碍物（穿模）。
    * 游戏内 postStep 与无头回归（autopilot）共用同一实现，两处行为不会漂移。
    * pose: {x,z}（就地修改）；heading 弧度；最多尝试 5 次推出。
+   * 迭代用模块级暂存 OBB（单线程独占，不与 sim 的车辆 OBB 共用对象）。
    */
+  var _pushO = { x: 0, z: 0, angle: 0, hw: 1, hl: 1, ca: 1, sa: 0, br: 0 };
   function pushOut(pose, heading, carCfg, obstacles) {
     for (var it = 0; it < 5; it++) {
-      var obb = carObb(pose.x, pose.z, heading, carCfg);
+      var obb = setObb(_pushO, pose.x, pose.z, heading, carCfg.width / 2, carCfg.length / 2);
       var hi = firstHit(obb, obstacles);
       if (hi < 0) break;
       var push = minPushOut(obb, obstacles[hi]);
@@ -136,6 +151,7 @@
 
   return {
     makeObb: makeObb,
+    setObb: setObb,
     carObb: carObb,
     corners: corners,
     obbOverlap: obbOverlap,

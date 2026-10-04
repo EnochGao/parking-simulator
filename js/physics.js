@@ -126,8 +126,10 @@
     }
 
     // --- 运动学积分（后轴参考，与真车一致） ---
-    // 偏航率 ω = v·tan(δ)/轴距 以后轴速度定义；后轴沿新航向推进（后轮纯滚动无侧滑），
-    // 车几何中心由后轴沿航向前推 _dRear——转陡弯时车中心带真实侧偏角、车尾真实外摆
+    // 偏航率 ω = v·tan(δ)/轴距 以后轴速度定义；后轴沿新航向推进（后轮纯滚动不侧滑），
+    // 车几何中心由后轴沿航向前推 _dRear——转陡弯时车中心带真实侧偏角、车尾真实外摆。
+    // 提取后轴用步前航向 f0、推进/回嵌用步后航向 f1：后轴每步精确位移 v·dt·f1（纯滚动），
+    // 与 pulse.js 逐式一致——两积分器受同一解析契约测试约束（tests 第 13 节），改式即红
     if (this.speed !== 0) {
       var f0x = Math.sin(this.heading), f0z = Math.cos(this.heading);
       var rx = this.x - f0x * this._dRear;
@@ -141,7 +143,7 @@
       this.z = rz + f1z * this._dRear;
       this.odometer += Math.abs(this.speed) * dt;
     }
-    return { speed: this.speed, steer: this.steer, gear: this.gear, heading: this.heading };
+    // 不再返回快照对象：sim.step 调用后直接丢弃（60Hz 纯浪费分配），调用方一律读实例字段
   };
 
   CarPhysics.prototype.isStopped = function () {

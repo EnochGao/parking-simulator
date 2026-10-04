@@ -19,18 +19,25 @@
     return Math.min(dev, 180 - dev);
   }
 
-  /** spot: {x,z,angle,w,l} → 车位四边形（顶点顺序统一，用于内点判定） */
-  function spotPoly(spot) {
+  /** 车位四边形写入共享暂存（热路径零分配；单线程同步消费，勿跨调用保留） */
+  var POLY = [[0, 0], [0, 0], [0, 0], [0, 0]];
+  var CPTS = [[0, 0], [0, 0], [0, 0], [0, 0]];   // evaluate 用：车四角暂存
+  function spotPolyInto(spot, poly) {
     var a = spot.angle, c = Math.cos(a), s = Math.sin(a);
     // 前向(泊车方向)=(s,c)，右侧=(c,-s)
     var fx = s, fz = c, rx = c, rz = -s;
     var hw = spot.w / 2, hl = spot.l / 2;
-    return [
-      [spot.x + rx * hw + fx * hl, spot.z + rz * hw + fz * hl],
-      [spot.x - rx * hw + fx * hl, spot.z - rz * hw + fz * hl],
-      [spot.x - rx * hw - fx * hl, spot.z - rz * hw - fz * hl],
-      [spot.x + rx * hw - fx * hl, spot.z + rz * hw - fz * hl]
-    ];
+    poly[0][0] = spot.x + rx * hw + fx * hl; poly[0][1] = spot.z + rz * hw + fz * hl;
+    poly[1][0] = spot.x - rx * hw + fx * hl; poly[1][1] = spot.z - rz * hw + fz * hl;
+    poly[2][0] = spot.x - rx * hw - fx * hl; poly[2][1] = spot.z - rz * hw - fz * hl;
+    poly[3][0] = spot.x + rx * hw - fx * hl; poly[3][1] = spot.z + rz * hw - fz * hl;
+    return poly;
+  }
+
+  /** spot: {x,z,angle,w,l} → 车位四边形（顶点顺序统一，用于内点判定）。
+   *  公共 API 新建返回（调用方可任意保留）；evaluate 热路径走 spotPolyInto 共享暂存 */
+  function spotPoly(spot) {
+    return spotPolyInto(spot, [[0, 0], [0, 0], [0, 0], [0, 0]]);
   }
 
   /**
@@ -39,22 +46,22 @@
    */
   function evaluate(args) {
     var C = args.cfg, car = args.carCfg;
-    var poly = spotPoly(args.spot);
+    var poly = spotPolyInto(args.spot, POLY);
     var devDeg = angleDevDeg(args.heading, args.spot.angle);
     var posOff = Math.hypot(args.x - args.spot.x, args.z - args.spot.z);
 
-    // 四角检测（用碰撞模块会引入循环依赖，这里内联凸多边形判断）
+    // 四角检测（用碰撞模块会引入循环依赖，这里内联凸多边形判断）。
+    // pts 用模块级暂存：车位附近每物理步调用一次，旧实现每次 10 个小数组 ≈600 个/秒
     var inside = false;
     if (devDeg <= C.completeAngleDeg) {
       var c = Math.cos(args.heading), s2 = Math.sin(args.heading);
       var fx = s2, fz = c, rx = c, rz = -s2;
       var hw = car.width / 2, hl = car.length / 2;
-      var pts = [
-        [args.x + rx * hw + fx * hl, args.z + rz * hw + fz * hl],
-        [args.x + rx * hw - fx * hl, args.z + rz * hw - fz * hl],
-        [args.x - rx * hw - fx * hl, args.z - rz * hw - fz * hl],
-        [args.x - rx * hw + fx * hl, args.z - rz * hw + fz * hl]
-      ];
+      var pts = CPTS;
+      pts[0][0] = args.x + rx * hw + fx * hl; pts[0][1] = args.z + rz * hw + fz * hl;
+      pts[1][0] = args.x + rx * hw - fx * hl; pts[1][1] = args.z + rz * hw - fz * hl;
+      pts[2][0] = args.x - rx * hw - fx * hl; pts[2][1] = args.z - rz * hw - fz * hl;
+      pts[3][0] = args.x - rx * hw + fx * hl; pts[3][1] = args.z - rz * hw + fz * hl;
       inside = true;
       for (var i = 0; i < 4; i++) {
         if (!inConvex(pts[i][0], pts[i][1], poly)) { inside = false; break; }

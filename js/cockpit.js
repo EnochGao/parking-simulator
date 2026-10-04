@@ -279,8 +279,11 @@
   function buildMirrors(carGroup, renderer, hideInMirror, interiorHideExtra) {
     hideInMirror = hideInMirror || [];
     var VIEW = PS.VIEW || {};
-    var EXT_FOV = VIEW.mirrorFov || 58;      // 外后视镜相机视场
-    var INT_FOV = VIEW.inMirrorFov || VIEW.mirrorFov || 58; // 车内后视镜相机视场
+    // 视场角直读 config.VIEW（唯一源；此前的 || 58 兜底是永不生效的死默认，还与配置值 40 相矛盾）。
+    // RT 尺寸读 config.QUALITY（触屏档由 game.js 在首帧前写回降档值；Node 测试无 QUALITY 走默认）
+    var Q = (typeof PS !== 'undefined' && PS.QUALITY) || {};
+    var EXT_FOV = VIEW.mirrorFov;      // 外后视镜相机视场
+    var INT_FOV = VIEW.inMirrorFov;    // 车内后视镜相机视场
     var mirrors = [];
 
     /** pos: 镜面位置；camPos: 镜相机位置；yaw: 镜面朝向；camYaw: 镜相机朝向；size: [宽,高]
@@ -292,7 +295,7 @@
       // 渲染目标与相机宽高比一律取镜面自身宽高比：车内镜是 3.2:1 的扁长镜片，
       // 若沿用 16:9 渲染目标会把画面水平拉伸约 1.8 倍，镜中形状/距离与其它视野不一致
       var aspect = size[0] / size[1];
-      var rtW = 384, rtH = Math.max(2, Math.round(rtW / aspect));
+      var rtW = Q.mirrorRtW || 384, rtH = Math.max(2, Math.round(rtW / aspect));
       var rt = new THREE.WebGLRenderTarget(rtW, rtH);
       var cam = new THREE.PerspectiveCamera(fov, aspect, 0.3, 160);
       cam.position.set(camPos.x, camPos.y, camPos.z);
@@ -378,7 +381,7 @@
     revCam.rotation.x = -28 * D2R;   // 向下俯视，以车后地面与障碍为主、顶部留地平线
     revCam.layers.enable(1);         // layer1 = 倒影专属层：动态引导线（assist.js）只进倒影画面
     carGroup.add(revCam);
-    var revRt = new THREE.WebGLRenderTarget(320, 180);
+    var revRt = new THREE.WebGLRenderTarget(Q.revRtW || 320, Q.revRtH || 180);
     var revMat = new THREE.MeshBasicMaterial({ map: revRt.texture, side: THREE.DoubleSide });
     // 屏体 0.205×0.115（8 寸悬浮屏可视区，16:9）：贴在屏框朝向驾驶员的前侧面
     //（z 需小于框体前侧面 0.7775，否则框体从驾驶员浅俯视角整体遮住屏面 —— 车头 +z，眼位 z 0.05）

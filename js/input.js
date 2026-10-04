@@ -15,9 +15,11 @@
     else GP = window.PS.Gamepad;
   }
 
-  /** 中性制动输入：松开即刹车、保持当前转角（后视镜调节等驾驶封锁场景用） */
+  /** 中性制动输入：松开即刹车、保持当前转角（后视镜调节等驾驶封锁场景用）。
+   *  返回共享只读对象——所有调用方（物理步/录像）都同步消费字段，无人保留引用 */
+  var BLOCKED = { steer: 0, drive: 0, handbrake: false, holdSteer: true };
   function blockedInput() {
-    return { steer: 0, drive: 0, handbrake: false, holdSteer: true };
+    return BLOCKED;
   }
 
   /**
@@ -25,8 +27,10 @@
    * keys: 键位状态表 {w,a,s,d,space:true/false}（由壳层键盘监听维护）
    * gpad: 手柄句柄（可选，需提供 drive() → {steer,drive,handbrake|null}）
    * 键盘优先（数字量），手柄模拟量补位——合并语义见 gamepad.js mergeDrive。
+   * sample() 复用同一输出对象（60Hz 热路径零分配）；调用方须同步消费，勿跨步保留。
    */
   function createDriver(keys, gpad) {
+    var out = { steer: 0, drive: 0, holdSteer: true, handbrake: false };
     return {
       sample: function () {
         deps();
@@ -34,7 +38,8 @@
         var m = GP.mergeDrive(
           (keys.a ? 1 : 0) - (keys.d ? 1 : 0),
           (keys.w ? 1 : 0) - (keys.s ? 1 : 0),
-          gs
+          gs,
+          out
         );
         m.handbrake = m.handbrake || !!keys.space;
         return m;

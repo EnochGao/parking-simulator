@@ -30,6 +30,8 @@
     PHYS: {
       maxFwd: 15 / 3.6,     // 前进极速 m/s
       maxRev: 10 / 3.6,     // 倒车极速
+      fixedDt: 1 / 60,     // 固定物理步长（游戏壳层步进 / 演示重放 / 录像"帧序即时间"的唯一来源；
+                            // 改步频需连 input.js 录像带语义与 demo_paths 重解一起考虑）
       accel: 3.0,           // 油门加速度
       brake: 6.0,           // 制动减速度
       drag: 0.6,            // 自然阻力（仅 pulse.js 演示/规划积分使用；玩家侧松开即刹车，不走此项）
@@ -51,6 +53,18 @@
     RADAR: {
       range: 2.5,           // 报警半径 m（对标真车 2.5m 间歇音）
       urgent: 0.7           // 急促音距离 m
+    },
+    QUALITY: {
+      mirrorRtW: 384,       // 外后视镜渲染目标宽 px（高按镜片宽高比推）
+      revRtW: 320, revRtH: 180,   // 倒车影像渲染目标
+      /* 触屏档（手机/平板 GPU 预算）：game.js 检测触屏后在首帧前套用——
+       * pixelRatio 与阴影贴图直接设到渲染器，RT 尺寸写回本节单值（cockpit 读 PS.QUALITY） */
+      touch: {
+        pixelRatioMax: 1.25,
+        shadowSize: 1024,
+        mirrorRtW: 256,
+        revRtW: 240, revRtH: 135
+      }
     },
     GAMEPAD: {
       deadzone: 0.08,          // 左摇杆死区（归零阈值）

@@ -6,10 +6,10 @@
  * ?cockpittest=1     座舱转向联动自测：方向盘↔车轮↔车标（window.__COCKPIT_RESULTS）
  * ?unlock=1          解锁全部关卡（自由练习） */
 (function () {
-  var DT = 1 / 60;
   window.addEventListener('DOMContentLoaded', function () {
     var Game = window.PS.Game;
     var game = new Game(document.getElementById('app'));
+    var DT = game.DT;   // 与游戏壳层同一固定步长（config.PHYS.fixedDt 单源）
     window.__game = game;
 
     var q = {};

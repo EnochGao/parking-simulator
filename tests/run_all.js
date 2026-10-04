@@ -484,7 +484,88 @@ section('脉冲积分');
   check('pulse: 低速一步刹停不过冲', st.v === 0);
 })();
 
-/* ---------------- 13. 拐弯真实性门禁（tools/turn_check.js） ---------------- */
+/* ---------------- 13. 双积分器差分（"规划即所行"契约门禁） ----------------
+ * physics.js（玩家侧）与 pulse.js（演示/规划侧）纵向模型刻意不同（蠕行/接合 vs 巡行），
+ * 巡行速度也不同（maxFwd vs demoSpeed），轨迹不可直接比对——但运动学核心必须满足
+ * 同一解析契约，这是全部 15 关标准答案"规划即所行"的基础：
+ *   ① Δheading = v·tan(δ)/L·dt（v=步后速度、δ=步后转角）
+ *   ② 后轴每步位移恰为 v·dt·f(h_步后)（提取用步前航向、推进/回嵌用步后航向的纯滚动）
+ * 任一侧改动破坏同式即红。两积分器分别钉在各自稳态速度上（每步纵向净零）验证 */
+section('双积分器差分');
+(function () {
+  var PULSE = require(path.join(JS, 'pulse.js'));
+  var P = CFG.PHYS, dt = P.fixedDt, CAR = CFG.CAR;
+  var dRear = CAR.frontOverhang + CAR.wheelbase - CAR.length / 2;
+  function wrapPi(a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; }
+  function rearAxle(x, z, h) { return { x: x - Math.sin(h) * dRear, z: z - Math.cos(h) * dRear }; }
+
+  // 同一转向输入序列（含打满/回中/反打，覆盖 steerRate 与 centerRate 两段斜坡）
+  var seq = [0.5, 0.5, 0.8, 0.8, 0, -0.4, -0.4, 0.3];
+  var ROUNDS = 8, EPS = 1e-9;
+
+  function contractCheck(tag, stepFn, state) {
+    var okDh = true, okRa = true, worst = 0;
+    for (var i = 0; i < seq.length * ROUNDS; i++) {
+      var sf = seq[i % seq.length];
+      var h0 = state.h, v0 = state.v, d0 = state.steer;
+      var ra0 = rearAxle(state.x, state.z, h0);
+      stepFn(sf);
+      // ① 航向增量（用步后速度/步后转角预言）
+      var expectDh = v0 / CAR.wheelbase * Math.tan(state.steer) * dt;
+      var gotDh = wrapPi(state.h - h0);
+      if (Math.abs(gotDh - expectDh) > EPS) { okDh = false; break; }
+      // ② 后轴位移 = v·dt·f(步后航向)
+      var ra1 = rearAxle(state.x, state.z, state.h);
+      var ex = ra1.x - ra0.x - v0 * dt * Math.sin(state.h);
+      var ez = ra1.z - ra0.z - v0 * dt * Math.cos(state.h);
+      var dev = Math.hypot(ex, ez);
+      if (dev > worst) worst = dev;
+      if (dev > EPS) { okRa = false; break; }
+    }
+    check('差分: ' + tag + ' 航向增量同式', okDh);
+    check('差分: ' + tag + ' 后轴纯滚动位移同式', okRa, '最大偏差=' + worst.toExponential(2) + 'm');
+  }
+
+  // physics：前进满速稳态（drive=1 时每步钳回极速，纵向净零）
+  var c = new PHYS.CarPhysics({ car: CFG.CAR, phys: P }, { x: 0, z: 0, heading: 0 });
+  c.speed = P.maxFwd;
+  var cView = { get x() { return c.x; }, get z() { return c.z; }, get h() { return c.heading; }, get v() { return c.speed; }, get steer() { return c.steer; } };
+  contractCheck('physics', function (sf) { c.update(dt, { drive: 1, steer: sf }); }, cView);
+  check('差分: physics 稳态速度钉住', approx(c.speed, P.maxFwd, 1e-9));
+
+  // pulse：巡行稳态（v=demoSpeed，纵向净零）
+  var st = { x: 0, z: 0, h: 0, v: P.demoSpeed, steer: 0, gear: 'D' };
+  contractCheck('pulse', function (sf) { PULSE.stepMotion(st, sf, dt, P, CAR); }, st);
+  check('差分: pulse 稳态速度钉住', approx(st.v, P.demoSpeed, 1e-9));
+
+  // 转向斜坡差分（静止打轮）：两积分器斜坡速率/方向判定逐帧一致（数值 bit 级）
+  var c2 = new PHYS.CarPhysics({ car: CFG.CAR, phys: P }, { x: 0, z: 0, heading: 0 });
+  var st2 = { x: 0, z: 0, h: 0, v: 0, steer: 0, gear: 'D' };
+  var rampOk = true;
+  for (var i2 = 0; i2 < seq.length * 6; i2++) {
+    c2.update(dt, { steer: seq[i2 % seq.length] });             // 静止：只转轮不动车
+    PULSE.stepMotion(st2, seq[i2 % seq.length], dt, P, CAR);    // v 会向巡行爬升，此处只比 steer
+    if (!approx(c2.steer, st2.steer, 1e-12)) { rampOk = false; break; }
+  }
+  check('差分: 转向斜坡速率一致（静止打轮）', rampOk);
+  check('差分: 静止打轮车身不动', approx(c2.x, 0) && approx(c2.z, 0) && approx(c2.heading, 0));
+})();
+
+/* ---------------- 14. 文档与关卡数据一致性 ----------------
+ * 关卡数在 README 列表与 DESIGN 关卡表里手写——加关忘改文档是真实发生过的返工，
+ * 此处以 LEVELS 数量为锚做断言 */
+section('文档一致性');
+(function () {
+  var fs = require('fs');
+  var n = LVL.LEVELS.length;
+  var rd = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  var dn = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DESIGN.md'), 'utf8');
+  check('文档: README 关卡数与 LEVELS 一致', rd.indexOf('（' + n + ' 关') >= 0, 'README 应含「' + n + ' 关」');
+  var rows = (dn.match(/^\| \d+ \| /gm) || []).length;
+  check('文档: DESIGN 关卡表行数与 LEVELS 一致', rows === n, '表行=' + rows + ' 关卡=' + n);
+})();
+
+/* ---------------- 15. 拐弯真实性门禁（tools/turn_check.js） ---------------- */
 section('拐弯真实性');
 (function () {
   var r = require('child_process').spawnSync(process.execPath,
