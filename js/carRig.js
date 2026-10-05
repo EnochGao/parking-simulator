@@ -104,13 +104,14 @@
       }
 
       /* 方向盘随转向输入旋转（传动比见 steerVisualRatio）。
-       * 视觉层以 steerVisualRate 为转速上限平滑追踪目标角：前轮转向速率 55°/s×传动比 7.5
-       * = 412°/s 的打轮速度超出真实手速，观感发飘；限速后方向盘以 ~300°/s 转动，
-       * 稳态（保持转向/回正到位）仍与目标角完全一致——车轮与方向盘联动不变 */
+       * 视觉层以 steerVisualRate 为转速上限追踪目标角：上限高于物理打轮/回正速率
+       * 换算到方向盘的速度（见 config 注释），正常驾驶时方向盘每帧即时到位——
+       * 松开方向键物理转角冻结，视觉盘同步停住，无"松手还在转"的延迟感；
+       * 上限仅对回放/自测中转角跳变起平滑作用 */
       var target = -fw * (CAR.steerVisualRatio || 8);
       var wheel = cockpit.wheelGroup;
       var d = target - wheel.rotation.z;
-      var maxStep = (CAR.steerVisualRate || 300 * D2R) * elapsed;
+      var maxStep = (CAR.steerVisualRate || 560 * D2R) * elapsed;
       if (Math.abs(d) <= maxStep) wheel.rotation.z = target;
       else wheel.rotation.z += (d > 0 ? 1 : -1) * maxStep;
 
