@@ -141,13 +141,20 @@
       api.showScreen(box);
     };
 
-    /* 选关。items: [{lv, unlocked, stars, best}]（由 progress.unlockMap 预计算） */
+    /* 选关。items: [{lv, unlocked, stars, best}]（由 progress.unlockMap 预计算）。
+     * 按 lv.chapter 分章渲染：几十关规模下单屏网格无法浏览，分章标题 + 每章一网格 */
     api.showLevelSelect = function (items, onPick, onBack) {
       var box = el('div', 'menu-box wide');
       box.appendChild(el('h2', '', '选择关卡'));
-      var grid = el('div', 'level-grid');
+      var grid = null, curCh = null;
       items.forEach(function (it) {
         var lv = it.lv, unlocked = it.unlocked;
+        if (lv.chapter !== curCh) {
+          curCh = lv.chapter;
+          box.appendChild(el('h3', 'chapter-title', lv.chapterTitle || ('第 ' + curCh + ' 章')));
+          grid = el('div', 'level-grid');
+          box.appendChild(grid);
+        }
         var card = el('div', 'level-card' + (unlocked ? '' : ' locked'));
         card.innerHTML =
           '<div class="lc-head">' + lv.id.replace('lv', '') + '</div>' +
@@ -158,7 +165,6 @@
         if (unlocked) card.onclick = function () { onPick(lv); };
         grid.appendChild(card);
       });
-      box.appendChild(grid);
       var back = el('button', 'btn', '返回');
       back.setAttribute('data-gp', 'back'); // 手柄 B 键返回
       back.onclick = onBack;

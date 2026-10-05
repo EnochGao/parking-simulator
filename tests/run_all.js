@@ -565,6 +565,17 @@ section('文档一致性');
   check('文档: DESIGN 关卡表行数与 LEVELS 一致', rows === n, '表行=' + rows + ' 关卡=' + n);
 })();
 
+/* ---------------- 15b. 烘焙路径新鲜度（物理指纹门禁） ----------------
+ * demo_paths 由 solver 用当前 CAR/PHYS 烘焙；改驾驶参数而不重跑 solver 会让几十条
+ * 标准答案悄悄失效（执行器与规划器共用 pulse 积分）。指纹不一致即红，提示重烘焙 */
+section('路径新鲜度');
+(function () {
+  var DP = require(path.join(JS, 'demo_paths.js'));
+  var fp = CFG.fingerprint();
+  check('demo_paths 物理指纹与 config 一致（改动 CAR/PHYS 后重跑 node tools/solver.js）',
+    DP._fp === fp, '烘焙=' + (DP._fp || '无') + ' 当前=' + fp);
+})();
+
 /* ---------------- 15. 拐弯真实性门禁（tools/turn_check.js） ---------------- */
 section('拐弯真实性');
 (function () {

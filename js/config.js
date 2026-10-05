@@ -5,7 +5,7 @@
   else { root.PS = root.PS || {}; api.CONFIG = api; Object.assign(root.PS, api); }
 })(typeof self !== 'undefined' ? self : this, function () {
   var D2R = Math.PI / 180;
-  return {
+  var CONFIG = {
     D2R: D2R,
     CAR: {
       // 本田飞度 第四代 GR9（2021款 1.5L CVT）公开参数：
@@ -100,4 +100,20 @@
       dragRate: 0.35     // 鼠标拖拽灵敏度（°/px）：抓住地图拖动，拖满 1280px 宽约 450°
     }
   };
+  /** 物理指纹：CAR+PHYS 的稳定哈希（键序无关）。tools/solver.js 烘焙 demo_paths.js 时
+   *  记录当前指纹，回归测试对比此值——改了驾驶相关参数而未重跑 solver 时测试红，
+   *  防止几十条标准答案被参数改动悄悄失效（路径与 pulse 积分共用这些值） */
+  CONFIG.fingerprint = function () {
+    function stable(v) {
+      if (typeof v === 'function') return '"fn"';
+      if (v == null || typeof v !== 'object') return JSON.stringify(v);
+      if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+    }
+    var s = stable({ CAR: CONFIG.CAR, PHYS: CONFIG.PHYS });
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h.toString(16);
+  };
+  return CONFIG;
 });

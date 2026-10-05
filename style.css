@@ -50,7 +50,9 @@ body { font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; co
 .btn.big:hover { filter: brightness(1.12); }
 
 h2 { margin-bottom: 16px; }
-.level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 18px 0 22px; }
+.level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 14px 0 22px; }
+.chapter-title { font-size: 13px; color: #9fc6e8; text-align: left; margin: 18px 0 -2px; font-weight: 600; letter-spacing: 1px; }
+.chapter-title:first-of-type { margin-top: 6px; }
 .level-card { background: #232833; border: 1px solid #3a4150; border-radius: 12px; padding: 14px 10px; cursor: pointer; transition: all .15s; position: relative; }
 .level-card:hover { border-color: #6fd66f; transform: translateY(-2px); }
 .level-card.locked { opacity: .45; cursor: default; }

@@ -377,6 +377,7 @@ args.forEach(function (a) {
 var levels = ids.length ? ids.map(function (i) { return LVL.byId(i); }).filter(Boolean) : LVL.LEVELS;
 
 try { out = require(path.join(JS, 'demo_paths.js')); } catch (e) { /* 首次生成 */ }
+out._fp = CFG.fingerprint();   // 物理指纹随烘焙写入：参数改动而未重跑时回归测试红（见 config.js）
 var fail = 0;
 levels.forEach(function (lv) {
   var r = null, verified = false, gearCosts = [2.5, 5, 8, 14];
