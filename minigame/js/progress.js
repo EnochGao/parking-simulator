@@ -1,6 +1,7 @@
 /* js/progress.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 进度与存档（唯一持久化入口）：读档/写档/解锁链/续玩目标/下一关
  * 此前存档读写散在 hud.js（视图层里写 localStorage）、解锁链在选关界面、
  * 续玩目标在 game.js——三处各持一份逻辑。收编后 hud 只管画，game 只管流转。

@@ -1,6 +1,7 @@
 /* js/levels.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 关卡聚合器：数据按章拆在 js/levels/*.js（构造器在 js/level_kit.js），此处拼装与查询。
  * 浏览器按 index.html 脚本序把章注册进 PS.CHAPTERS，Node 由本章显式 require——
  * 两侧拼出同一份 LEVELS，解锁链/选关/回归/求解器照常只面向 LEVELS 编程。

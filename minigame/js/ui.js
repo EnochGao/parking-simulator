@@ -1,6 +1,7 @@
 /* js/ui.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* UI 调度器：按平台选择 HUD/触屏控件实现
  *   网页端：PS.Hud（DOM，style.css）+ game.js 内建 DOM 触屏控件——现网代码，原样复用
  *   小游戏端：PS.UiWx（离屏 2D canvas + 全屏贴图叠加，无 DOM 环境）

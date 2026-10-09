@@ -1,6 +1,7 @@
 /* js/platform.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 平台抽象层（浏览器 / 微信小游戏双端）
  * 目标：把所有"浏览器有、小游戏没有"的环境差异收口到一个对象里——
  *   DOM（document/body/classList）、window 尺寸、resize/前后台事件、键盘、

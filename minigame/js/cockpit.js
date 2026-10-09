@@ -1,6 +1,7 @@
 /* js/cockpit.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 第一人称驾驶舱：复刻本田飞度 GR9 座舱布局——三段抬升式低仪表台、双幅方向盘、
  * 7 寸液晶仪表、悬浮中控屏（倒车影像）、贯穿式出风口、三后视镜（实时渲染到纹理，镜像翻转） */
 (function (root, factory) {

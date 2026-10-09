@@ -1,6 +1,7 @@
 /* js/level_kit.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 关卡构造工具：障碍物构造器/默认尺寸/邻车摆位——章节数据文件（js/levels/*.js）的公共语言。
  * 从 levels.js 抽出：几十关规模下数据按章拆文件，构造器单源避免每章重复定义。 */
 (function (root, factory) {

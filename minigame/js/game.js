@@ -1,6 +1,7 @@
 /* js/game.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 游戏主壳：渲染器/场景/主循环、状态机流转、输入接驳、辅助开关、selftest
  * 职责划分（各模块单一职责，壳只做编排）：
  *   js/sim.js      一局规则（步进/碰撞计次/评分/完成/失败）——与无头回归同一实现
@@ -543,17 +544,27 @@ var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览�
     driveBtn('tc-w', '▲', '前进', 'w');
     driveBtn('tc-s', '▼', '倒车', 's');
     driveBtn('tc-space', '⏹', '手刹', 'space');
-    // 右上功能列：暂停 + 引导线/俯视/倒影/调镜（与键盘 H/M/C/V 同一代码路径）
-    fnBtn('tc-pause', '⏸', function () {
+    // 左上功能列：暂停 + 引导线/俯视/倒影/调镜（与键盘 H/M/C/V 同一代码路径）。
+    // 原右上横排压在车内后视镜的前进视野投影带（画面中上偏右），移到左上；
+    // 按住看镜时整排隐藏（_tcLookSync，看右镜时车内镜会扫到左上角）
+    var fnEls = [];
+    fnEls.push(fnBtn('tc-pause', '⏸', function () {
       if (self.state === 'playing') self.pause();
       else if (self.state === 'paused') self.resume();
-    });
+    }).el);
     this._tcFns = {
       g: fnBtn('tc-h', '线', function () { self.toggleGuide(); }),
       m: fnBtn('tc-m', '俯', function () { self.toggleTop(); }),
       c: fnBtn('tc-c', '影', function () { self.toggleRevCam(); })
     };
-    fnBtn('tc-madj', '调镜', function () { self.mirrorMode = true; });
+    for (var fk in this._tcFns) fnEls.push(this._tcFns[fk].el);
+    fnEls.push(fnBtn('tc-madj', '调镜', function () { self.mirrorMode = true; }).el);
+    this._tcLookSync = function (on) {
+      var hide = !!on;
+      if (root.__fnHidden === hide) return;
+      root.__fnHidden = hide;
+      for (var i = 0; i < fnEls.length; i++) fnEls[i].style.visibility = hide ? 'hidden' : '';
+    };
     var mirrorPanel = buildMirrorPanel();
     this.container.appendChild(mirrorPanel);
     // 竖屏提示横幅（CSS 仅在 body.touch-mode.portrait 且驾驶态显示）
@@ -807,6 +818,8 @@ var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览�
     this.camera.rotation.y = Math.PI + this.lookYaw;
     // rotation.x 为正即视线向下俯（rotation.y=π 时欧拉 XYZ 下 x 分量方向相反）
     this.camera.rotation.x = this.lookPitch + CAM_PITCH;
+    /* 按住看镜时隐藏触屏功能列（车内镜画面扫过画面顶部，避免遮挡/误触） */
+    if (this._tcLookSync) this._tcLookSync(this.lookHeld);
     /* 太阳灯跟随 */
     this.sun.position.set(carP.x + 18, 30, carP.z + 12);
     this.sun.target.position.set(carP.x, 0, carP.z);

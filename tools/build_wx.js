@@ -52,12 +52,16 @@ var MODULES = [
   'js/game.js'
 ];
 
-/* 模块包装头：window/self → GameGlobal；遮蔽 CommonJS 强制浏览器分支 */
+/* 模块包装头：window/self → GameGlobal；遮蔽 CommonJS 强制浏览器分支。
+ * 注意必须用赋值而非仅 var 声明：开发者工具 2.x 编译器把每个文件包成
+ * function(require, module, exports){...} 参数式模块，var 重声明参数不清空
+ * 参数值（JS 语义），UMD 会误入 CommonJS 分支导致 GameGlobal.PS 挂不上。 */
 function wrapModule(rel, code) {
   return [
     '/* ' + rel + ' · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */',
     'var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */',
-    'var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */',
+    'var module, exports, define;                  /* 声明以捕获外层泄露 */',
+    'module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */',
     code.trim()
   ].join('\n');
 }
@@ -69,6 +73,7 @@ function wrapThree(code) {
     '/* vendor/three.min.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */',
     'var window = GameGlobal, self = GameGlobal;',
     'var module, exports, define;',
+    'module = exports = define = undefined;        /* 同 wrapModule：防参数式模块包装泄露 */',
     'if (typeof globalThis === "undefined") GameGlobal.globalThis = GameGlobal;',
     'if (typeof document === "undefined") var document = { createElement: function (t) { return t === "canvas" ? wx.createCanvas() : null; }, addEventListener: function () {} };',
     code.trim()

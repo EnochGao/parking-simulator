@@ -1,6 +1,7 @@
 /* js/carRig.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 整车视觉装配（rig）：车身模型 + 座舱 + 三面后视镜 + 倒车影像屏的建/用/释
  * 建车流水线此前内联在 game.loadLevel（模型/座舱/镜组/调节量恢复/相机挂载），
  * 单车表现（姿态同步/阿克曼前轮/方向盘/仪表/刹车灯/转向灯）内联在 updateVisuals。

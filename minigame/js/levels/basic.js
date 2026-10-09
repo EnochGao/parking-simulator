@@ -1,6 +1,7 @@
 /* js/levels/basic.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 第一章·基础篇：认识操作与基础入库（lv01-04）。构造器见 js/level_kit.js。
  * 浏览器按 index.html 脚本序注册进 PS.CHAPTERS，Node 由 levels.js 显式 require。 */
 (function (root, factory) {

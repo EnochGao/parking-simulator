@@ -1,6 +1,7 @@
 /* js/carModel.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 低多边形车辆外观模型（本田飞度 第四代 GR9：4.109m × 1.694m × 1.537m）
  * 尺寸基准取自 js/config.js 的 CAR（浏览器端 PS.CAR），缺省时用同一组飞度数值兜底 */
 (function (root, factory) {

@@ -1,6 +1,7 @@
 /* js/autopilot.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 标准答案执行器：重放规划器（tools/solver.js）生成的控制段
  * 控制段 = { g:'D'|'R', sf:-1..1(转向), dur:秒 }
  * 运动积分调用 js/pulse.js（与规划器同一代码）——"规划即所行"。

@@ -1,6 +1,7 @@
 /* js/sim.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 一局模拟（sim）：物理步进 → 碰撞（计次冷却/反弹/推出）→ 评分 → 完成/失败判定
  * 唯一权威实现：游戏内主循环（game.js）与无头回归/演示执行器（autopilot.js）
  * 共用本模块——此前 game.postStep 与 autopilot.postUpdate 是两份手工同步的拷贝

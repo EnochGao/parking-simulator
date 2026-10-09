@@ -1,6 +1,7 @@
 /* js/physics.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 车辆物理：运动学自行车模型 + 前后油门控制（Node/浏览器双端通用）
  * 控制约定：W/↑ 前进、S/↓ 倒车、松开即刹车停稳；档位 D/R 随驾驶意图自动切换。
  * 坐标约定：地面为 x-z 平面，y 向上；heading=0 时车头朝 +z；

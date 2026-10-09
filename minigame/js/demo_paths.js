@@ -1,6 +1,7 @@
 /* js/demo_paths.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 自动生成：tools/solver.js 产物（控制段：g 档位 sf 转向 dur 秒），勿手改 */
 (function (root, factory) {
   var api = factory();

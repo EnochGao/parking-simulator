@@ -83,7 +83,15 @@ sandbox.require = function (p) {
   loadedModules[rel] = { exports: {} };
   var file = path.join(MGDIR, rel);
   if (!fs.existsSync(file)) throw new Error('require 缺文件: ' + p);
-  vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: rel });
+  /* 模拟开发者工具 2.x 编译器的模块环境：每个文件包成参数式 CommonJS 包装
+   * function(require, module, exports, define){...}。关键语义：模块内
+   * var 重声明这些名字不会清空参数值——build_wx.js 的包装头若只靠 var 遮蔽，
+   * UMD 会误入 CommonJS 分支、GameGlobal.PS 挂不上（真机/工具黑屏启动失败）。 */
+  var fn = vm.runInContext(
+    '(function (require, module, exports, define) {\n' +
+    fs.readFileSync(file, 'utf8') + '\n})',
+    sandbox, { filename: rel });
+  fn(sandbox.require, loadedModules[rel], loadedModules[rel].exports, undefined);
   return loadedModules[rel];
 };
 vm.createContext(sandbox);
@@ -237,6 +245,27 @@ PS.UiWx.__dispatch('start', { touches: [tl], changedTouches: [tl] });
 check('按住左镜 → lookHeld=1（转头看左外镜）', fakeGame.lookHeld === 1);
 PS.UiWx.__dispatch('end', { touches: [], changedTouches: [tl] });
 check('松开 → lookHeld=0', fakeGame.lookHeld === 0);
+/* 看镜时功能列隐藏不可触（车内镜画面扫过画面顶部——遮挡/误触回归）：
+ * 按住右镜期间点 影 应无效，松开后恢复可点 */
+var revTaps = 0;
+fakeGame.toggleRevCam = function () { revTaps++; };
+var cBtn = findBtn('c');
+function tapC(id) {
+  var t = { identifier: id, clientX: cBtn.x + 23, clientY: cBtn.y + 23 };
+  PS.UiWx.__dispatch('start', { touches: [t], changedTouches: [t] });
+  PS.UiWx.__dispatch('end', { touches: [], changedTouches: [t] });
+}
+tapC(28);
+check('平时点 影 → 倒影开关触发', revTaps === 1);
+var thR = { identifier: 29, clientX: lmr.x + 23, clientY: lmr.y + 23 };
+PS.UiWx.__dispatch('start', { touches: [thR], changedTouches: [thR] });
+check('按住右镜 → lookHeld=2', fakeGame.lookHeld === 2);
+tapC(30);
+check('看镜期间功能列隐藏不可触（影 无效）', revTaps === 1, 'revTaps=' + revTaps);
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [thR] });
+check('松开右镜 → lookHeld=0', fakeGame.lookHeld === 0);
+tapC(31);
+check('松开后功能列恢复可触（影 生效）', revTaps === 2, 'revTaps=' + revTaps);
 /* 进调镜模式：驾驶键隐藏、镜像面板替换 */
 PS.UiWx.__dispatch('start', { touches: [{ identifier: 22, clientX: madj.x + 23, clientY: madj.y + 23 }], changedTouches: [{ identifier: 22, clientX: madj.x + 23, clientY: madj.y + 23 }] });
 PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 22, clientX: madj.x + 23, clientY: madj.y + 23 }] });
@@ -327,6 +356,11 @@ console.log('\n== 布局：多分辨率触控按钮两两不重叠（真机重�
       }
     }
     check(sz.w + 'x' + sz.h + (sz.ins.left ? '(刘海)' : '') + '：11 枚触控钮两两不重叠且不出屏', bad.length === 0, bad.join(','));
+    /* 功能列须在左半屏：车内后视镜的前进视野投影带在画面中上偏右（约 0.6W-0.85W），
+     * 原右上横排正压在镜面上（真机实测遮挡 bug） */
+    var fnBad = btns.filter(function (b) { return b.grp === 'fn' && b.x + b.w > sz.w * 0.55; });
+    check(sz.w + 'x' + sz.h + '：功能列在左半屏（避开车内镜投影带）', fnBad.length === 0,
+      fnBad.map(function (b) { return b.id + '@' + b.x; }).join(','));
   });
   /* 恢复标准尺寸并触发 resize，后续测试用标准布局 */
   devSize.windowWidth = 812; devSize.windowHeight = 375;

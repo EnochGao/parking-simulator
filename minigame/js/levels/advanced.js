@@ -1,6 +1,7 @@
 /* js/levels/advanced.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 第二章·进阶篇：老小区实战（lv05-10）。构造器见 js/level_kit.js。 */
 (function (root, factory) {
   var api = factory(root);

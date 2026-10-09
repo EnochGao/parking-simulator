@@ -271,7 +271,7 @@
       f(ctx, 13); ctx.fillStyle = C.faint; ctx.textBaseline = 'middle';
       var help = [
         '左下 ◀▶ 方向（松开保持角度） · 右下 ▲前进 ▼倒车 · 松开即刹车',
-        '⏹ 手刹 · 右上功能列：⏸=暂停 线=引导 俯=俯视 影=倒影',
+        '⏹ 手刹 · 左上功能列：⏸=暂停 线=引导 俯=俯视 影=倒影',
         '俯视画面可双指拧旋转 · 辅助随时开关，逐步"脱辅"'
       ];
       var hy = m.y + (s.model.helpY || (m.h - 74));
@@ -593,12 +593,14 @@
         case 's': b.x = R - 76; b.y = B - 76; b.w = b.h = 76; break;
         case 'space': b.x = R - 62; b.y = B - 116 - 62; b.w = b.h = 62; break;
         case 'pause': case 'g': case 'm': case 'c': case 'madj': {
-          /* 功能钮横排贴顶（HUD 状态条下方，向左展开）：竖排在矮横屏（H≈375-430）
-           * 必与右下手刹（自底向上 B-178）重叠——真机实测重叠 bug */
+          /* 功能钮横排贴顶（HUD 状态条下方，自左缘向右展开）。原右上横排正压在车内
+           * 后视镜的前进视野投影带（画面中上偏右，~0.6W-0.85W）；竖排在矮横屏
+           * （H≈375-430）又与右下手刹重叠（真机实测 bug），故取左上。
+           * 按住看镜时整排隐藏（tcBtnVisible）——看右镜时车内镜会扫到左上角 */
           var fi = { pause: 0, g: 1, m: 2, c: 3, madj: 4 }[b.id];
           b.w = b.h = 46;
           b.y = 64 + ins.top;
-          b.x = W - 14 - ins.right - 46 - fi * 60;   // 间距 14px
+          b.x = 14 + ins.left + fi * 60;   // 间距 14px
           break;
         }
         case 'm1': case 'm2': case 'm3': {
@@ -1023,11 +1025,14 @@
     cur.dirty = true;
   }
 
-  /** 触屏按钮可见性：调镜模式下驾驶/看镜/功能组隐藏，镜像面板组替换显示 */
+  /** 触屏按钮可见性：调镜模式下驾驶/看镜/功能组隐藏，镜像面板组替换显示；
+   *  按住看镜（左/右）时功能组隐藏——车内镜画面会扫到画面顶部，避免遮挡与误触 */
   function tcBtnVisible(b) {
     if (!cur.tc.visible) return false;
     var mm = cur.game && cur.game.mirrorMode;
-    return b.grp === 'mirror' ? !!mm : !mm;
+    if (mm) return b.grp === 'mirror';
+    if (b.grp === 'fn' && cur.game && cur.game.lookHeld) return false;
+    return true;
   }
 
   return {

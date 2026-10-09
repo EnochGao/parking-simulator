@@ -1,6 +1,7 @@
 /* js/world.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
-var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
+var module, exports, define;                  /* 声明以捕获外层泄露 */
+module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 关卡 → 3D 世界搭建（与碰撞体共用 levels.js 数据，单一数据源） */
 (function (root, factory) {
   var api = factory();

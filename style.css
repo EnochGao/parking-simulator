@@ -119,13 +119,14 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
 .tc-w { right: calc(104px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .tc-s { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .tc-space { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(116px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; font-size: 20px; }
-/* 右上功能列（暂停 + 引导线/俯视/倒影/调镜）：横排贴顶（HUD 状态条下方）——
- * 竖排在矮横屏（H≈375-430）会与右下角手刹重叠（真机实测 bug） */
-.tc-pause { right: calc(14px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
-.tc-h { right: calc(74px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
-.tc-m { right: calc(134px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
-.tc-c { right: calc(194px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
-.tc-madj { right: calc(254px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+/* 左上功能列（暂停 + 引导线/俯视/倒影/调镜）：横排贴顶（HUD 状态条下方）——
+ * 原右上横排压在车内后视镜的前进视野投影带（画面中上偏右）；竖排在矮横屏
+ * （H≈375-430）又会与右下角手刹重叠，故取左上。按住看镜时整排隐藏（game.js） */
+.tc-pause { left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-h { left: calc(74px + env(safe-area-inset-left, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-m { left: calc(134px + env(safe-area-inset-left, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-c { left: calc(194px + env(safe-area-inset-left, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-madj { left: calc(254px + env(safe-area-inset-left, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
 /* 按住看镜钮（左镜/右镜）：方向盘右侧竖排两枚 */
 .tc-lml { left: calc(160px + env(safe-area-inset-left, 0px)); bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
 .tc-lmr { left: calc(160px + env(safe-area-inset-left, 0px)); bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
