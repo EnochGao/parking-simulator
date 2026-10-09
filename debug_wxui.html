@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>ParkMaster · 小游戏 UI 预览（ui_wx canvas 实现调试页）</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body { background: #0c0e12; color: #e8eaee; font: 14px "Microsoft YaHei", "PingFang SC", sans-serif; }
+    body.wrap { padding: 18px; }
+    h1 { font-size: 16px; margin-bottom: 4px; }
+    p.tip { color: #79808e; font-size: 12.5px; margin-bottom: 14px; }
+    .bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .bar button { padding: 7px 14px; background: #2c313c; color: #e8eaee; border: 1px solid #454b58; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .bar button.active { background: #2f9e5a; border-color: #2f9e5a; font-weight: bold; }
+    .stage { position: relative; width: 812px; height: 375px; border: 2px solid #3a3f4a; border-radius: 10px; overflow: hidden; background: #9db8c9; }
+    .stage iframe { width: 812px; height: 375px; border: 0; display: block; }
+    .note { margin-top: 12px; color: #9aa2b1; font-size: 12px; line-height: 1.8; }
+    /* frame 模式：ui_wx 画布全屏铺满（platform 以 iframe 视口为窗口尺寸） */
+    body.frame { overflow: hidden; }
+    body.frame canvas { position: absolute; inset: 0; touch-action: none; }
+  </style>
+</head>
+<body>
+  <script>
+    /* 双模式单文件：默认外层壳（选界面的控制条 + 812×375 iframe），
+     * ?mode=frame 为 iframe 内容——加载 ui_wx 与关卡数据，canvas 直上屏，
+     * 鼠标事件翻译成触摸总线事件。与微信端运行的是同一份 ui_wx.js。 */
+    if (location.search.indexOf('mode=frame') >= 0) {
+      document.body.className = 'frame';
+      /* 调试页脚本一律带时间戳：绕开 HTTP 缓存，改完源码刷新即生效 */
+      var B = '?b=' + Date.now();
+      var files = ['js/platform.js', 'js/config.js', 'js/level_kit.js', 'js/levels/basic.js',
+        'js/levels/advanced.js', 'js/levels/challenge.js', 'js/demo_paths.js', 'js/levels.js',
+        'js/progress.js', 'js/ui_wx.js', 'js/debug_frame_entry.js'];
+      files.forEach(function (f) { document.write('<script src="' + f + B + '"><\/script>'); });
+    } else {
+      document.body.className = 'wrap';
+      document.body.innerHTML =
+        '<h1>小游戏 UI 预览 · ui_wx.js canvas 实现（812×375 横屏仿真）</h1>' +
+        '<p class="tip">与微信端同一份代码（PS.UiWx）：菜单/选关/简报/结算为静态界面，驾驶态 HUD 与虚拟键带假数据动画。鼠标按下/拖动/抬起 = 触摸总线事件；选关列表可拖动滚动。</p>' +
+        '<div class="bar" id="bar">' +
+        '  <button data-s="menu" class="active">主菜单</button>' +
+        '  <button data-s="select">选关</button>' +
+        '  <button data-s="briefing">任务简报</button>' +
+        '  <button data-s="result">结算（三星）</button>' +
+        '  <button data-s="pause">暂停</button>' +
+        '  <button data-s="play">驾驶态 HUD+虚拟键</button>' +
+        '</div>' +
+        '<div class="stage"><iframe id="frame"></iframe></div>' +
+        '<div class="note">验证点：菜单按钮按下高亮/抬起触发、选关卡片点击进入、滚动条随拖动、驾驶键按住高亮直写 keys、' +
+        '功能钮开关联动高亮、结算表格对齐。正式包验证：微信开发者工具导入 minigame/ 目录。</div>';
+      var frame = document.getElementById('frame');
+      frame.src = 'debug_wxui.html?mode=frame&b=' + Date.now();   // 动态 src：绕开 iframe 文档缓存
+      document.getElementById('bar').addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        [].forEach.call(this.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        frame.contentWindow.__show(b.getAttribute('data-s'));
+      });
+    }
+  </script>
+</body>
+</html>

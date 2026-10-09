@@ -1,3 +1,6 @@
+/* js/game.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
+var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
 /* 游戏主壳：渲染器/场景/主循环、状态机流转、输入接驳、辅助开关、selftest
  * 职责划分（各模块单一职责，壳只做编排）：
  *   js/sim.js      一局规则（步进/碰撞计次/评分/完成/失败）——与无头回归同一实现

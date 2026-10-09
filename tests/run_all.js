@@ -585,6 +585,122 @@ section('拐弯真实性');
     (r.stdout || '').split('\n').filter(function (l) { return l.indexOf('✗') >= 0 || l.indexOf('FAIL') >= 0; }).join(' | '));
 })();
 
+/* ---------------- 16. 触屏方向盘模拟量（input 第三输入源，v2 项） ---------------- */
+section('触屏方向盘');
+(function () {
+  var touch = { steer: 0 };
+  var keys = {};
+  var d = INPUT.createDriver(keys, null, touch);
+  var s1 = d.sample();
+  check('方向盘：居中(0)=保持转角（holdSteer）', s1.steer === 0 && s1.holdSteer === true);
+  touch.steer = 0.5;
+  var s2 = d.sample();
+  check('方向盘：转角 0.5 → 模拟量 0.5 生效', approx(s2.steer, 0.5) && s2.holdSteer === false);
+  keys.a = true;
+  var s3 = d.sample();
+  check('方向盘：键盘优先（A 按下覆盖方向盘）', s3.steer === 1);
+  keys.a = false;
+  keys.d = true; keys.w = true; keys.space = true;
+  touch.steer = -0.3;
+  var s4 = d.sample();
+  check('方向盘：油门/手刹通路不受影响', s4.steer === -1 && s4.drive === 1 && s4.handbrake === true);
+  keys.d = false; keys.w = false; keys.space = false; touch.steer = 0;
+  var s5 = d.sample();
+  check('方向盘：全部回中后恢复 holdSteer', s5.holdSteer === true);
+})();
+
+/* ---------------- 17. 复盘回放（recorder/tape 确定性，v2 项） ---------------- */
+section('复盘回放');
+(function () {
+  /* 录像带：假输入源按序给出，包一层 recorder 逐帧记录 */
+  var seq = [
+    { steer: 0, drive: 1, handbrake: false, holdSteer: false },
+    { steer: 0.5, drive: 1, handbrake: false, holdSteer: false },
+    { steer: 0.5, drive: 0, handbrake: false, holdSteer: false },
+    { steer: 0, drive: -1, handbrake: false, holdSteer: false },
+    { steer: 0, drive: 0, handbrake: true, holdSteer: true }
+  ];
+  var i = 0;
+  var fake = {
+    sample: function () { return seq[Math.min(i++, seq.length - 1)]; },
+    blocked: INPUT.blockedInput
+  };
+  var rec = INPUT.createRecorder(fake);
+  for (var k = 0; k < 3; k++) rec.sample();
+  rec.blocked();
+  check('录像：逐帧记录输入（4 帧）', rec.tape.length === 4 &&
+    rec.tape[1].s === 0.5 && rec.tape[3].hs === true);
+  /* 回放：帧序一致，超带后中性制动 */
+  var tp = INPUT.createTapeSource(rec.tape);
+  var got = [tp.sample(), tp.sample(), tp.sample(), tp.sample(), tp.sample()];
+  check('回放：帧序重演一致', got[0].drive === 1 && got[1].steer === 0.5 && got[2].drive === 0 && got[3].holdSteer === true);
+  check('回放：超带后中性制动（与真人松手一致）', tp.isDone() && got[4].holdSteer === true && got[4].drive === 0);
+  tp.seek(0);
+  check('回放：seek 可从头重演', tp.sample().drive === 1 && !tp.isDone());
+  /* 端到端确定性：同一输入序列驱动 sim 两次，轨迹/碰撞/得分逐项一致 */
+  function playOnce() {
+    var lv = LVL.byId('lv02');
+    var car = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS },
+      { x: lv.player.x, z: lv.player.z, heading: lv.player.a * Math.PI / 180 });
+    var run = SIM.createRun(lv, { car: car });
+    var scripted = [
+      { steer: 0, drive: 1, handbrake: false, holdSteer: false },
+      { steer: 1, drive: 1, handbrake: false, holdSteer: false }
+    ];
+    var j = 0;
+    var src = { sample: function () { return scripted[j++ % scripted.length]; }, blocked: INPUT.blockedInput };
+    var recorder = INPUT.createRecorder(src);
+    var last = null;
+    for (var n = 0; n < 600; n++) {
+      var r = run.step(1 / 60, recorder.sample());
+      last = r;
+      if (r.completed || r.failed) break;
+    }
+    return {
+      end: [car.x.toFixed(6), car.z.toFixed(6), car.heading.toFixed(6), run.collisions, last.ev ? last.ev.score : -1],
+      tapeLen: recorder.tape.length
+    };
+  }
+  var a = playOnce(), b = playOnce();
+  check('复盘端到端：两次同输入逐项一致（轨迹/碰撞/得分）',
+    JSON.stringify(a.end) === JSON.stringify(b.end),
+    JSON.stringify(a.end) + ' vs ' + JSON.stringify(b.end));
+  check('复盘端到端：录像帧数两次相同', a.tapeLen === b.tapeLen && a.tapeLen > 0);
+})();
+
+/* ---------------- 18. PWA 离线（manifest/sw 资源一致性，v2 项） ---------------- */
+section('PWA 离线');
+(function () {
+  var fs = require('fs');
+  var ROOTP = path.join(__dirname, '..');
+  var manifest = JSON.parse(fs.readFileSync(path.join(ROOTP, 'manifest.webmanifest'), 'utf8'));
+  check('manifest：图标与启动项齐全', manifest.icons.length >= 2 && manifest.start_url === './index.html' &&
+    manifest.icons.every(function (ic) { return fs.existsSync(path.join(ROOTP, ic.src)); }));
+  var sw = fs.readFileSync(path.join(ROOTP, 'sw.js'), 'utf8');
+  var m = sw.match(/ASSETS = \[([\s\S]*?)\]/);
+  check('sw：ASSETS 列表存在', !!m);
+  if (m) {
+    var assets = m[1].match(/'\.\/[^']+'/g).map(function (s) { return s.slice(3, -1); });
+    check('sw：ASSETS 每一项都真实存在', assets.every(function (p2) {
+      return fs.existsSync(path.join(ROOTP, p2 === '' ? 'index.html' : p2));
+    }));
+    /* index.html 引用的 script/css/manifest/icon 必须全部进预缓存（防发版漏项） */
+    var html = fs.readFileSync(path.join(ROOTP, 'index.html'), 'utf8');
+    var refs = [];
+    var re = /<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g, mm;
+    while ((mm = re.exec(html))) {
+      var r2 = mm[1];
+      if (!/^(https?:|data:|#)/.test(r2)) refs.push(r2.replace(/^\.\//, ''));
+    }
+    var missing = refs.filter(function (r3) { return assets.indexOf(r3) < 0; });
+    check('sw：index.html 引用资源全覆盖（无漏缓存）', missing.length === 0, '缺: ' + missing.join(','));
+    check('sw：wx/调试专属文件不进缓存', assets.indexOf('js/ui_wx.js') < 0 &&
+      assets.indexOf('js/debug_frame_entry.js') < 0 && assets.indexOf('js/platform.js') >= 0);
+  }
+  check('server：webmanifest MIME 已注册',
+    fs.readFileSync(path.join(ROOTP, 'tools', 'server.js'), 'utf8').indexOf('webmanifest') >= 0);
+})();
+
 /* ---------------- 汇总 ---------------- */
 console.log('\n========== 测试结果 ==========');
 console.log('通过: ' + passed + '  失败: ' + failed);

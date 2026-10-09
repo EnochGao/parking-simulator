@@ -1,3 +1,6 @@
+/* js/input.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
+var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
 /* 驾驶输入源：键盘/手柄 → 统一 input 对象的可替换抽象
  * sample() 产出 {steer, drive, handbrake, holdSteer}，与 CarPhysics.update 约定一致。
  * 输入路径收口于此的意义：录像（createRecorder 逐帧记录）与回放/联机

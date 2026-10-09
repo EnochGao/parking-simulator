@@ -1,13 +1,15 @@
 {
   "name": "parking-simulator",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "停车大师 ParkMaster · 新手司机停车训练模拟器（零依赖，Node/浏览器双端）",
+  "description": "停车大师 ParkMaster · 新手司机停车训练模拟器（零依赖，Node/浏览器/微信小游戏三端）",
   "scripts": {
     "start": "node tools/server.js 8137",
     "test": "node tests/run_all.js",
     "audit:mirror": "node tools/mirror_audit.js",
     "turn": "node tools/turn_check.js",
-    "solver": "node tools/solver.js"
+    "solver": "node tools/solver.js",
+    "build:wx": "node tools/build_wx.js",
+    "test:wx": "node tools/build_wx.js --smoke && node tests/wx_bundle_test.js"
   }
 }

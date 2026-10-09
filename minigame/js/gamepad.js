@@ -1,3 +1,6 @@
+/* js/gamepad.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
+var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
 /* 手柄支持：盖世小鸡等 XInput/标准布局手柄（浏览器 Gamepad API，逐帧轮询）
  * 键位（W3C 标准布局，盖世小鸡手柄切到 XInput/PC 模式后即为此映射）：
  *   左摇杆 X → 方向（模拟量，死区+渐进曲线）；RT→前进；LT→倒车；B→手刹；

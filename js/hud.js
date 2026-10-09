@@ -191,8 +191,9 @@
       api.showScreen(box);
     };
 
-    /* 结算。落档由调用方（game.js → progress.record）完成，这里只展示 */
-    api.showResult = function (level, result, onRetry, onNext, onMenu, hasNext) {
+    /* 结算。落档由调用方（game.js → progress.record）完成，这里只展示。
+     * onReplay（可选非空）提供"复盘回放"入口（结算重演本局驾驶，教学价值核心） */
+    api.showResult = function (level, result, onRetry, onNext, onMenu, hasNext, onReplay) {
       var pass = result.stars > 0;
       var box = el('div', 'menu-box result');
       box.appendChild(el('div', 'result-stars ' + (pass ? 'win' : 'lose'), stars(result.stars)));
@@ -216,6 +217,11 @@
       var bRetry = el('button', 'btn', '再来一次 (R)');
       bRetry.onclick = onRetry;
       btns.appendChild(bRetry);
+      if (onReplay) {
+        var bR = el('button', 'btn', '复盘回放');
+        bR.onclick = onReplay;
+        btns.appendChild(bR);
+      }
       if (pass && hasNext) {
         var bNext = el('button', 'btn big', '下一关 (N)');
         bNext.onclick = onNext;

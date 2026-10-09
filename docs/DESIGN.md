@@ -420,3 +420,102 @@ URL 参数（测试钩子，亦是功能）：
   蠕行起步、松开即停）、俯视/暂停钮工作、竖屏横幅显示、桌面模式无任何回归
   （selftest 15/15、mirrortest 28/28）。
 
+
+## 17. v1.4 变更记录（2026-10-06，微信小游戏移植 MVP）
+
+- **平台抽象层 `js/platform.js`**：浏览器/小游戏双端环境差异收口（画布创建/窗口尺寸/
+  resize/前后台/键盘/音频上下文/存储/URL 参数/触摸总线）。game.js 等上层只调
+  `PS.Platform.*`，不再直接碰 `document`/`wx`。
+- **UI 双实现 + `js/ui.js` 调度器**：网页端保留 DOM 版（hud.js + game.js 触屏控件，
+  零行为变化）；小游戏端新增 `js/ui_wx.js` canvas 实现（接口与 hud.js 逐一对齐）。
+  触屏功能钮统一 `setOn` 高亮契约、`_tcSetVisible` 显隐契约。
+- **UI 合成管线（小游戏）**：一块屏幕画布给 three.js 作 WebGL 主渲染，UI 画在离屏
+  2D canvas 上经 CanvasTexture 全屏透明贴图叠加（presentOverlay）；整帧门控与 UI
+  脏检查联动（overlayNeedsFrame），静止菜单仍零渲染负载，贴图仅在 UI 有新内容时上传。
+- **构建 `tools/build_wx.js`**：按 index.html 脚本序拼接单文件 `minigame/game.js`
+  （848KB，远低于 4MB 主包上限）。prelude 遮蔽 `module/exports/define` 并将
+  `window/self` 指向 globalThis——小游戏 game.js 是 CommonJS 模块，否则全部 UMD
+  误入 Node 分支 require 不存在的路径；另附 document 兜底垫片与 wx 画布
+  addEventListener no-op（three r134 注册 webglcontextlost 需要）。
+- **触摸路由**：菜单按钮"抬起且仍在钮内"触发（滑动超 14px 取消，防滚动误触）；
+  虚拟驾驶键按下直写 keys、滑出圆形区即抬起（多点独立跟踪）；选关列表拖动滚动。
+- **调试页 `debug_wxui.html`**：iframe 固定 812×375 视口仿真横屏手机，鼠标翻译成
+  触摸总线事件——桌面浏览器即可预览/点按全部 wx UI，与微信端同一份 ui_wx.js。
+- **测试**：`tests/wx_bundle_test.js` mock-wx 冒烟 49 项（垫片/平台检测/六界面构建
+  绘制/触摸路由/驾驶键 keys/HUD 数值/触摸总线注册）+ 静态防线（UMD 变体A工厂内
+  误用 root.PS/THREE——本次真实踩坑两次：工厂闭包看不到外层 IIFE 的 root 参数）。
+  回归：node 484 全绿、浏览器 selftest 15/15。
+- 待办（提审前）：软著/备案、真机性能调优（镜面 RT 上传带宽）、激励视频 SDK 接入位。
+
+## 18. v1.5 变更记录（2026-10-06，v2 规划首批三项落地）
+
+- **触屏模拟量方向盘**（替换 ◀▶ 数字转向键，网页 DOM + wx canvas 双实现）：抓轮缘
+  绕中心旋转（触点极角 1:1 跟随，±270°=满打——与座舱方向盘转动圈数一致），与真车同向——轮顺时针=车右转、
+  逆时针=车左转；松手保持转角（居中=保持，与 A/D 松开同语义）；双击回正。
+  转角写入 game.touchAnalog，input.js 作为第三输入源合并（优先级 键盘>方向盘>手柄），
+  与录像/回放通道同构。视觉：轮缘+三辐条+绿色轮毂随动，有转角时轮缘绿色高亮。
+- **复盘回放**：input.js 预置的 createRecorder/createTapeSource 正式接线——每局逐帧记录
+  输入（固定步长，帧序即时间），结算界面新增"复盘回放"按钮：重进关卡按录像带重演，
+  sim 确定性保证轨迹/碰撞/得分与原局一致；回放终局跳过落档；HUD 提示"复盘回放中"；
+  驾驶控件回放中不响应，Esc/⏸ 可暂停退出。教学价值：新手看自己的失误动作回放。
+- **PWA 离线安装**：manifest.webmanifest（横屏全屏、深色主题、双尺寸图标）+ sw.js
+  应用外壳缓存优先（35 项静态资源预缓存，发版改 CACHE 版本号自动清旧）；图标由
+  tools/gen_icons.js 零依赖生成（zlib 手写 PNG 编码，方向盘图案 2x 超采样光栅化）。
+  tests/run_all.js 校验 sw ASSETS 与 index.html 引用一致性（发版漏缓存即测试失败）。
+- 测试：Node 501 项全绿（新增方向盘合并 5 项/录像回放确定性 8 项/PWA 一致性 6 项）；
+  wx 冒烟 54 项全绿（新增方向盘拖动/保持/回正与回放按钮命中）；浏览器实测：方向盘
+  拖动满打→车辆航向变化全链路、复盘回放进入与重演、sw 注册+36 项预缓存。
+- **真机黑屏修复**（真机预览与开发者工具的行为差异三处钉死）：
+  ① GL 上下文显式 WebGL1（platform.createGlContext）——微信运行时仅支持 'webgl'，
+  部分真机内核对 'webgl2' 返回残缺上下文而非 null，three 误入 WebGL2 路径即黑屏
+  （开发者工具是完整 Chromium 复现不了）；产物验证 getContext 序列零次 'webgl2'。
+  ② 旧基础库无全局 performance/requestAnimationFrame 的兜底垫片（缺失时每帧抛错=黑屏）。
+  ③ 入口 try/catch + wx.showModal——启动异常直接弹窗显示堆栈，黑屏变成可见报错。
+- **真机黑屏修复二（自动预览仍黑屏场景）**：整帧门控在 wx 端关闭——真机 GL 合成器
+  不保证保留未重绘画布（浏览器才有的语义），静止菜单跳帧即黑屏；wx 每帧重画，
+  重活仍按需（阴影/镜面 RT/UI 贴图上传）。GL 创建加降级链（带属性失败→无属性重试）；
+  运行时错误 wx.onError 首次弹窗（启动错误弹窗之外补齐帧循环错误的可见性）。
+- **真机黑屏修复三（"运行错误 [object Object]"定位）**：gamepad.js 每帧轮询裸引用
+  navigator.getGamepads——真机运行时无 navigator，每帧 ReferenceError 打断帧循环
+  （渲染永不执行=黑屏，wx.onError 弹窗但被 String() 格式化成 [object Object]）。
+  修复：pad() 加 navigator 存在性守卫 + bundle 垫片兜底；错误弹窗格式化解开
+  message/stack（wx.onError 参数是对象）。测试盲区根因：Node21+ vm 沙箱自带
+  navigator（仅缺 getGamepads），旧代码在沙箱静默降级而真机才炸——冒烟测试
+  已补"无 Gamepad API 环境"用例。
+- **真机"卡片空白"修复**：canvas 字体串归一化——微信旧版 2D 画布的 font 解析器对
+  带引号的字体族列表/数字字重('800')/小数字号/前导空格都可能静默解析失败，失败后
+  fillText 不渲染文字（图形正常）→ 选关卡"有框无字"。全部字体赋值收敛为
+  整数字号+bold/空+纯 sans-serif（中文走系统回退字体）。另加真机字体自检
+  （font 赋值生效性 + 中文 measureText，失败弹窗）与 UI 合成错误一次性弹窗
+  （此前 presentOverlay 静默吞错，缺字类问题不可见）。
+- **真机"卡片有框无字"根因定位与修复（PC 复现 + DevTools 实验闭环）**：微信运行时
+  （PC Radium 与真机同族）的 GL 会在两次纹理上传之间丢弃 CanvasTexture 内容——
+  "每帧渲染 overlay quad + 仅 dirty 时上传纹理"的组合下，静止界面纹理数帧后失效，
+  屏幕只剩顶部残条（红色全屏涂刷实验：画布数据完好 [getImageData 全红]、屏幕仅
+  顶部 ~22% 显示；Console 强制每帧重绘后卡片文字全部恢复）。修复：presentOverlay
+  每帧 tex.needsUpdate=true 全量重传（≈2.9MB/帧已验证可承受），drawAll 仍按 dirty
+  差量。诊断脚手架（对照字/数据行/自动 dump/字体自检弹窗）已全部移除，保留
+  __PS_UI 调试句柄与启动/运行错误弹窗。tools/_cdp.js 保留为微信开发者工具
+  CDP 调试小工具（--remote-debugging-port=9222 启动后可用）。
+- **真机"俯/手刹按钮重叠"修复**：触屏功能钮（⏸线俯影）由右侧竖排改横排贴顶
+  （HUD 状态条下方向左展开，间距 14px）——竖排从顶部铺到 y≈268，而手刹自底向上
+  占 y≈H-202 起，矮横屏（H≈375-430）两区间必然相交。网页 CSS 与 wx canvas
+  布局双端同步；wx 冒烟新增"H=360 缩放触发 resize 后功能钮与手刹/油门/倒车
+  零重叠"回归断言。
+- **移动端后视镜操作补齐（触屏版 Z/X/V）**：①按住看镜——方向盘右侧"左镜/右镜"
+  按住即转头看对应外后视镜（game.lookHeld，与键盘 Z/X 同语义）；②调镜——功能行
+  新增"调镜"钮进入调节模式：驾驶控件隐藏、弹出调节面板（左外/右外/车内三枚选镜
+  chip + 按住 ◀▶▲▼ 方向钮调角度 + 完成），方向钮直写 keys.a/d/w/s——与
+  game.adjustMirrors 键位通道同构，进入/退出时 releaseAll 防键位卡死；HUD 提示
+  文案触屏变体。网页 DOM 与 wx canvas 双实现。
+- **小游戏构建模块化（高内聚松耦合）**：build_wx.js 弃用单文件拼接，改为多文件
+  模块工程——`minigame/game.js` 入口按网页加载序 require，`libs/three.min.js` +
+  `js/*`（与网页版 js/ 一一对应，含 levels/ 子目录）。每个文件独立模块作用域，
+  包装头把 window/self 指向 GameGlobal（跨模块经 PS 命名空间互通）、遮蔽
+  module/exports 强制 UMD 走浏览器分支；three 专属 globalThis 兜底与 document
+  垫片。wx 冒烟测试改用 GameGlobal+require 加载器按真实模块语义加载入口。
+- **852x393（iPhone 16 Pro 横屏）布局排查**：新增多分辨率布局扫描回归（852x393
+  刘海左右 inset 59 / 844x390 / 812x375 / 736x360 / 667x375 / 932x430），断言 11 枚
+  触控钮两两不重叠且不出屏；看镜钮（左镜/右镜）改自适应分档——H≥372 叠在方向
+  盘正上方（远离中央仪表簇），H<372 矮屏放方向盘右侧。852x393 驾驶态与调镜
+  面板截图视觉验证通过。

@@ -8,7 +8,7 @@ var ROOT = path.join(__dirname, '..');
 var PORT = parseInt(process.argv[2] || '8137', 10);
 var MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png',
   '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.wasm': 'application/wasm'
 };
 

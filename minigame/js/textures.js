@@ -1,3 +1,6 @@
+/* js/textures.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
+var module, exports, define;                  /* 遮蔽 CommonJS：强制浏览器分支 */
 /* 程序化贴图（Canvas 生成，零外部资源，file:// 兼容） */
 (function (root, factory) {
   var api = factory();

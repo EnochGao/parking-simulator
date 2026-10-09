@@ -93,6 +93,10 @@ npm run solver            # （调物理参数后）重新求解各关标准答�
 npm start                 # 启动本地服务器（node tools/server.js 8137）
 ```
 
+**v1.5 新特性**：触屏模拟量方向盘（抓轮缘旋转与真车同向：顺时针=右转，±270° 满打（与座舱方向盘圈数 1:1）、松手保持、双击回正，替换 ◀▶ 数字键；按住左镜/右镜转头看镜，调镜面板触屏化（V 模式））；
+结算界面"复盘回放"（重演本局驾驶全程——固定步长确定性保证轨迹/碰撞/得分一致）；
+PWA 离线安装（Chrome/Edge 地址栏安装图标，断网可玩；`node tools/gen_icons.js` 重新生成图标）。
+
 URL 参数：`?level=lv03` 直达关卡；`?autotest=lv03` 观看标准答案演示；
 `?selftest=all` 浏览器全关回归；`?mirrortest=1` 后视镜/倒影渲染回读自测；
 `?cockpittest=1` 座舱转向联动自测（方向盘↔车轮↔车标）；`?unlock=1` 解锁全部关卡。
@@ -110,8 +114,9 @@ Node/浏览器双端同构模块，`tests/run_all.js` 与浏览器 `?selftest=al
 | 规则 | `sim.js` | 一局的步进/碰撞计次/评分/完成/失败——游戏内与无头回归共用同一实现 |
 | 物理 | `physics.js` / `collision.js` / `scoring.js` / `pulse.js` | 运动学、OBB+SAT、评分、脉冲积分（演示/规划侧专用积分源） |
 | 数据 | `levels.js` / `demo_paths.js` / `progress.js` | 关卡数据；标准答案控制段（工具产物）；进度与存档（解锁链/续玩/落档） |
-| 输入 | `input.js` / `gamepad.js` | 可替换输入源（键盘+手柄合并，支持录像/回放）与手柄轮询 |
+| 输入 | `input.js` / `gamepad.js` | 可替换输入源（键盘+触屏方向盘模拟量+手柄合并，逐帧录像/复盘回放）与手柄轮询 |
 | 表现 | `carRig.js` / `cockpit.js` / `carModel.js` / `world.js` / `assist.js` / `hud.js` | 整车装配与单车表现、座舱、场景、辅助、纯视图 UI |
+| 平台 | `platform.js` / `ui.js` / `ui_wx.js` / `sw.js` | 双端平台抽象（浏览器/微信小游戏）、UI 调度与 canvas 实现、PWA 离线 |
 | 自测 | `mirror_check.js` / `cockpit_check.js` | 浏览器渲染回读自测（`?mirrortest=1` / `?cockpittest=1`） |
 | 壳 | `game.js` / `main.js` | 渲染器/主循环/状态机/界面流转 |
 

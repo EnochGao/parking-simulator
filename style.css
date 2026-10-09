@@ -100,17 +100,61 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
 .tc-btn.drive:active { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
 .tc-btn.fn { width: 46px; height: 46px; font-size: 15px; }
 .tc-btn.fn.on { background: rgba(111,214,111,.4); border-color: #6fd66f; color: #c9f2cf; }
-/* 左下转向 / 右下油门-倒车-手刹（倒车在最外——泊车主操作）；env() 为刘海屏安全区 */
-.tc-a { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
-.tc-d { left: calc(104px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+/* 模拟量方向盘（v2：替换 ◀▶ 转向键）。轮缘+辐条纯 CSS，拖动旋转 ±135°=满打 */
+.tc-wheel { position: absolute; pointer-events: auto; touch-action: none; user-select: none;
+  left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+  width: 128px; height: 128px; border-radius: 50%; }
+.tc-wheel-face { position: absolute; inset: 0; border-radius: 50%;
+  border: 11px solid rgba(232,234,238,.5); background: rgba(20,24,30,.5); box-sizing: border-box;
+  backdrop-filter: blur(2px); will-change: transform; }
+.tc-wheel.active .tc-wheel-face { border-color: rgba(111,214,111,.85); }
+.tc-wheel-face .sp { position: absolute; background: rgba(232,234,238,.72); border-radius: 3px; }
+.tc-wheel-face .sp-l { left: 14%; top: 45.5%; width: 34%; height: 9%; }
+.tc-wheel-face .sp-r { right: 14%; top: 45.5%; width: 34%; height: 9%; }
+.tc-wheel-face .sp-b { left: 46.5%; top: 50%; width: 7%; height: 30%; }
+.tc-wheel-face b { position: absolute; left: 40%; top: 40%; width: 20%; height: 20%; border-radius: 50%; background: #6fd66fd0; }
+.tc-wheel small { position: absolute; left: -10px; right: -10px; bottom: -19px; text-align: center;
+  font-size: 10px; font-weight: 400; color: rgba(232,234,238,.65); pointer-events: none; }
+/* 右下油门-倒车-手刹（倒车在最外——泊车主操作）；env() 为刘海屏安全区 */
 .tc-w { right: calc(104px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .tc-s { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .tc-space { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(116px + env(safe-area-inset-bottom, 0px)); width: 62px; height: 62px; font-size: 20px; }
-/* 右上功能列：暂停 + 引导线/俯视/倒影（避开 HUD 状态栏） */
-.tc-pause { right: calc(14px + env(safe-area-inset-right, 0px)); top: 64px; }
-.tc-h { right: calc(14px + env(safe-area-inset-right, 0px)); top: 118px; }
-.tc-m { right: calc(14px + env(safe-area-inset-right, 0px)); top: 170px; }
-.tc-c { right: calc(14px + env(safe-area-inset-right, 0px)); top: 222px; }
+/* 右上功能列（暂停 + 引导线/俯视/倒影/调镜）：横排贴顶（HUD 状态条下方）——
+ * 竖排在矮横屏（H≈375-430）会与右下角手刹重叠（真机实测 bug） */
+.tc-pause { right: calc(14px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-h { right: calc(74px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-m { right: calc(134px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-c { right: calc(194px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+.tc-madj { right: calc(254px + env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); }
+/* 按住看镜钮（左镜/右镜）：方向盘右侧竖排两枚 */
+.tc-lml { left: calc(160px + env(safe-area-inset-left, 0px)); bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+.tc-lmr { left: calc(160px + env(safe-area-inset-left, 0px)); bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
+/* 后视镜调节面板（触屏版 V 模式） */
+.mirror-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 380px; height: 340px; z-index: 25; border-radius: 18px;
+  background: linear-gradient(160deg, #1d2129, #15171c); border: 1px solid #3a3f4a;
+  box-shadow: 0 18px 60px rgba(0,0,0,.5); }
+.mirror-panel .mp-title { position: absolute; top: 14px; left: 0; right: 0; text-align: center;
+  font-size: 17px; font-weight: bold; color: #e8eaee; }
+.mirror-panel .mp-chip { position: absolute; top: 52px; width: 108px; height: 40px; line-height: 40px;
+  text-align: center; border-radius: 10px; background: #2c313c; border: 1px solid #454b58;
+  color: #e8eaee; font-size: 14px; cursor: pointer; touch-action: manipulation; }
+.mirror-panel .mp-chip:nth-of-type(1) { left: 14px; }
+.mirror-panel .mp-chip:nth-of-type(2) { left: 136px; }
+.mirror-panel .mp-chip:nth-of-type(3) { left: 258px; }
+.mirror-panel .mp-chip.on { background: rgba(111,214,111,.4); border-color: #6fd66f; color: #c9f2cf; }
+.mirror-panel .mp-arrow { position: absolute; width: 58px; height: 58px; line-height: 56px;
+  text-align: center; border-radius: 50%; background: rgba(20,24,30,.55); border: 1px solid #ffffff30;
+  color: #e8eaee; font-size: 20px; touch-action: none; user-select: none; }
+.mirror-panel .mp-arrow.on { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
+.mirror-panel .mp-u { left: calc(50% - 29px); top: 118px; }
+.mirror-panel .mp-l { left: calc(50% - 93px); top: 182px; }
+.mirror-panel .mp-r { left: calc(50% + 35px); top: 182px; }
+.mirror-panel .mp-d { left: calc(50% - 29px); top: 246px; }
+.mirror-panel .mp-done { position: absolute; left: calc(50% - 70px); bottom: 16px; width: 140px; height: 44px;
+  line-height: 44px; text-align: center; border-radius: 12px; font-weight: bold; font-size: 16px;
+  color: #e8eaee; background: linear-gradient(135deg, #2f9e5a, #227a44); border: 1px solid #2f9e5a;
+  cursor: pointer; touch-action: manipulation; }
 /* 驾驶态 HUD 底部仪表簇上移避让虚拟键 */
 body.touch-mode .hud-bottom { bottom: calc(116px + env(safe-area-inset-bottom, 0px)); }
 body.touch-mode .cluster { transform: scale(.92); }
