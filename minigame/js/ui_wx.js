@@ -169,29 +169,35 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     h.audioRect = { x: audioX, y: topY, w: wAudio, h: 38 };
     ctx.textAlign = 'left';
 
-    /* 底部仪表簇：挡位 / 车速 / 雷达格（触屏态上移 116px，cluster 缩至 .92） */
-    var botY = H - (touch ? 116 : 60) - ins.bottom;
+    /* 底部仪表簇：挡位 / 车速 / 雷达格。触屏态贴底收缩——原上浮 116px 避让虚拟键
+     * 会把仪表压到引擎盖/车位标线的视线带上；底部中央（方向盘与油门键之间）
+     * 本有空档，贴底落在仪表台投影带内不挡视线（与 style.css touch-mode 同规格）。
+     * botY 为簇顶：触屏按"簇底距屏缘 8px"反推，桌面版沿用 60px 底距 */
+    var chH = touch ? 44 : 54;                           // 簇高
+    var botY = touch ? (H - 8 - chH - ins.bottom) : (H - 60 - ins.bottom);
     var cx = W / 2;
-    f(ctx, 34, 'bold'); var gearW = ctx.measureText(h.gear).width;
-    f(ctx, 30, 'bold'); var speedW = ctx.measureText('' + h.speed).width;
-    var clusterW = gearW + 18 + speedW + 44 + 18 + (4 * 10 + 3 * 5) + 36;
+    var fg = touch ? 24 : 34, fs = touch ? 20 : 30;      // 触屏收缩字号
+    var rw = touch ? 8 : 10, rh = touch ? 18 : 26;       // 雷达格
+    f(ctx, fg, 'bold'); var gearW = ctx.measureText(h.gear).width;
+    f(ctx, fs, 'bold'); var speedW = ctx.measureText('' + h.speed).width;
+    var clusterW = gearW + 18 + speedW + (touch ? 34 : 44) + 18 + (4 * rw + 3 * 5) + (touch ? 12 : 36);
     var cl = cx - clusterW / 2;
-    ctx.fillStyle = 'rgba(16,18,24,.42)'; rr(ctx, cl, botY, clusterW, 54, 16); ctx.fill();
-    ctx.strokeStyle = 'rgba(51,56,66,.4)'; ctx.lineWidth = 1; rr(ctx, cl, botY, clusterW, 54, 16); ctx.stroke();
+    ctx.fillStyle = 'rgba(16,18,24,.42)'; rr(ctx, cl, botY, clusterW, chH, 16); ctx.fill();
+    ctx.strokeStyle = 'rgba(51,56,66,.4)'; ctx.lineWidth = 1; rr(ctx, cl, botY, clusterW, chH, 16); ctx.stroke();
     var kx = cl + 18;
-    f(ctx, 34, 'bold'); ctx.fillStyle = h.gear === 'R' ? C.orange : C.green;
-    ctx.textBaseline = 'middle'; ctx.fillText(h.gear, kx, botY + 27); kx += gearW + 18;
-    f(ctx, 30, 'bold'); ctx.fillStyle = C.text; ctx.fillText('' + h.speed, kx, botY + 26); kx += speedW;
-    f(ctx, 11); ctx.fillStyle = 'rgba(232,234,238,.6)'; ctx.fillText('km/h', kx, botY + 32); kx += 44;
+    f(ctx, fg, 'bold'); ctx.fillStyle = h.gear === 'R' ? C.orange : C.green;
+    ctx.textBaseline = 'middle'; ctx.fillText(h.gear, kx, botY + chH / 2); kx += gearW + 18;
+    f(ctx, fs, 'bold'); ctx.fillStyle = C.text; ctx.fillText('' + h.speed, kx, botY + chH / 2 - 1); kx += speedW;
+    f(ctx, 11); ctx.fillStyle = 'rgba(232,234,238,.6)'; ctx.fillText('km/h', kx, botY + chH / 2 + 6); kx += touch ? 34 : 44;
     for (var i = 0; i < 4; i++) {   // 雷达距离格：从右往左点亮（近端橙、远端绿）
-      var bx = kx + i * 15;
+      var bx = kx + i * (rw + 5);
       ctx.fillStyle = i < h.radarLv ? (i >= 2 ? '#e2701d' : '#2fae4a') : '#2c3038';
-      rr(ctx, bx, botY + 14, 10, 26, 3); ctx.fill();
+      rr(ctx, bx, botY + (chH - rh) / 2, rw, rh, 3); ctx.fill();
     }
 
-    /* 提示行（位于仪表簇上方） */
+    /* 提示行（位于仪表簇上方，贴底收缩后仍在底部边缘带） */
     if (h.hint) {
-      f(ctx, 14); ctx.fillStyle = C.hint; ctx.textAlign = 'center';
+      f(ctx, touch ? 12 : 14); ctx.fillStyle = C.hint; ctx.textAlign = 'center';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
       ctx.fillText(h.hint, cx, botY - 12);
       ctx.shadowBlur = 0; ctx.textAlign = 'left';

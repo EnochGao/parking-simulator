@@ -1,6 +1,6 @@
 {
   "name": "parking-simulator",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "停车大师 ParkMaster · 新手司机停车训练模拟器（零依赖，Node/浏览器/微信小游戏三端）",
   "scripts": {

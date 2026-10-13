@@ -135,9 +135,9 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
   width: 380px; height: 340px; z-index: 25; border-radius: 18px;
   background: linear-gradient(160deg, #1d2129, #15171c); border: 1px solid #3a3f4a;
   box-shadow: 0 18px 60px rgba(0,0,0,.5); }
-.mirror-panel .mp-title { position: absolute; top: 14px; left: 0; right: 0; text-align: center;
+.mirror-panel .mp-title { position: absolute; top: 12px; left: 0; right: 0; text-align: center;
   font-size: 17px; font-weight: bold; color: #e8eaee; }
-.mirror-panel .mp-chip { position: absolute; top: 52px; width: 108px; height: 40px; line-height: 40px;
+.mirror-panel .mp-chip { position: absolute; top: 42px; width: 108px; height: 40px; line-height: 40px;
   text-align: center; border-radius: 10px; background: #2c313c; border: 1px solid #454b58;
   color: #e8eaee; font-size: 14px; cursor: pointer; touch-action: manipulation; }
 .mirror-panel .mp-chip:nth-of-type(1) { left: 14px; }
@@ -148,17 +148,26 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
   text-align: center; border-radius: 50%; background: rgba(20,24,30,.55); border: 1px solid #ffffff30;
   color: #e8eaee; font-size: 20px; touch-action: none; user-select: none; }
 .mirror-panel .mp-arrow.on { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
-.mirror-panel .mp-u { left: calc(50% - 29px); top: 118px; }
-.mirror-panel .mp-l { left: calc(50% - 93px); top: 182px; }
-.mirror-panel .mp-r { left: calc(50% + 35px); top: 182px; }
-.mirror-panel .mp-d { left: calc(50% - 29px); top: 246px; }
-.mirror-panel .mp-done { position: absolute; left: calc(50% - 70px); bottom: 16px; width: 140px; height: 44px;
-  line-height: 44px; text-align: center; border-radius: 12px; font-weight: bold; font-size: 16px;
+/* 纵向节距压缩：▼ 底边（top+58）必须让开"完成"钮顶边（340-高-底距）——
+ * 原布局 ▼ 246..304 与完成钮 280..324 重叠 24px，完成钮后绘制压住 ▼ 下半圆 */
+.mirror-panel .mp-u { left: calc(50% - 29px); top: 94px; }
+.mirror-panel .mp-l { left: calc(50% - 93px); top: 158px; }
+.mirror-panel .mp-r { left: calc(50% + 35px); top: 158px; }
+.mirror-panel .mp-d { left: calc(50% - 29px); top: 222px; }
+.mirror-panel .mp-done { position: absolute; left: calc(50% - 70px); bottom: 10px; width: 140px; height: 42px;
+  line-height: 42px; text-align: center; border-radius: 12px; font-weight: bold; font-size: 16px;
   color: #e8eaee; background: linear-gradient(135deg, #2f9e5a, #227a44); border: 1px solid #2f9e5a;
   cursor: pointer; touch-action: manipulation; }
-/* 驾驶态 HUD 底部仪表簇上移避让虚拟键 */
-body.touch-mode .hud-bottom { bottom: calc(116px + env(safe-area-inset-bottom, 0px)); }
-body.touch-mode .cluster { transform: scale(.92); }
+/* 驾驶态 HUD：触屏贴底收缩小簇——原上浮 116px 避让虚拟键会把仪表压到引擎盖/
+ * 车位标线的视线带上；底部中央（方向盘与油门键之间）本有空档，落在仪表台
+ * 投影带内不挡视线，提示行随之沉到最底缘 */
+body.touch-mode .hud-bottom { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); gap: 4px; }
+body.touch-mode .cluster { gap: 12px; padding: 5px 12px; border-radius: 12px; }
+body.touch-mode .gear span { font-size: 22px; }
+body.touch-mode .speed b { font-size: 20px; }
+body.touch-mode .speed i { font-size: 10px; }
+body.touch-mode .radar i { width: 8px; height: 18px; }
+body.touch-mode .hint-line { font-size: 12px; min-height: 16px; }
 /* 竖屏提示横幅（仅触屏+竖屏显示；横屏自动消失） */
 .tc-rotate { display: none; position: absolute; top: 14%; left: 50%; transform: translateX(-50%);
   padding: 9px 20px; background: rgba(16,18,24,.85); border: 1px solid #3a3f4a; border-radius: 999px;
