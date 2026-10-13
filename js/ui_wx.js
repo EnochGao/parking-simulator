@@ -1036,11 +1036,14 @@
   }
 
   /** 触屏按钮可见性：调镜模式下驾驶/看镜/功能组隐藏，镜像面板组替换显示；
-   *  按住看镜（左/右）时功能组隐藏——车内镜画面会扫到画面顶部，避免遮挡与误触 */
+   *  非调镜态镜像面板组一律隐藏（曾漏此分支，选镜chips/方向箭头/完成钮
+   *  常驻驾驶画面——真机反馈）；按住看镜（左/右）时功能组隐藏——车内镜画面
+   *  会扫到画面顶部，避免遮挡与误触 */
   function tcBtnVisible(b) {
     if (!cur.tc.visible) return false;
     var mm = cur.game && cur.game.mirrorMode;
     if (mm) return b.grp === 'mirror';
+    if (b.grp === 'mirror') return false;
     if (b.grp === 'fn' && cur.game && cur.game.lookHeld) return false;
     return true;
   }
