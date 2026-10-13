@@ -102,6 +102,88 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     };
   }
 
+  /** 俯视转向辅助。背景：正交俯视下前轮被车身完全遮挡——轮外缘 0.833 < 车身半宽
+   * 0.847，打轮 <11° 一个像素都露不出来，满舵也只探出 ~9cm 深色窄边，玩家在
+   * 俯视图里无从知道当前往哪转。两件套补足反馈：
+   * - 前轮转角标线：两根琥珀色短杆悬浮在前轮正上方（高出车顶 0.11m，俯视不
+   *   被车身遮挡），挂在前轮 pivot 下随轮实时偏转，直接回答"轮朝哪"；
+   * - 预测轨迹弧：按当前前轮角以自行车模型（与 physics.js 后轴参考同式）从
+   *   车头/车尾（随档位）积分 LEN 米的预计轨迹，回答"车往哪走"；R 档颜色随
+   *   倒车雷达距离分级（与倒影弧线同一阈值），D 档取绿色。
+   * 仅俯视开启时 setVisible(true)；镜面 RT 俯视期间本就不渲染，无穿帮面。
+   * update(pose, carCfg, steer, reverse, radar) 每帧调用。 */
+  function createTopGuide(scene, car, cfg) {
+    var N = 28, LEN = 5;
+    var RAD = (typeof PS !== 'undefined' && PS.RADAR) || { range: 2.5, urgent: 0.7 };
+
+    /* 预测轨迹弧：layer 0 主场景线条，与静态引导线(0.06)/倒影弧线(0.07)错层 */
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    var mat = new THREE.LineBasicMaterial({ color: 0x35d06a, transparent: true, opacity: 0.95 });
+    var line = new THREE.Line(geo, mat);
+    line.frustumCulled = false;
+    line.visible = false;
+    scene.add(line);
+
+    /* 前轮转角标线：杆长≈轮胎直径（读作"这就是前轮"），挂 pivot 随轮偏转零额外
+     * 数学；pivot 原点在轮心(y=tireR)，杆位抬高到世界 y=1.62（车顶 1.51 之上） */
+    var barGeo = new THREE.BoxGeometry(0.06, 0.02, cfg.tireR * 2 + 0.015);
+    var barM = new THREE.MeshBasicMaterial({ color: 0xffc93f, transparent: true, opacity: 0.95 });
+    var bars = [];
+    if (car && car.frontWheels) {
+      car.frontWheels.forEach(function (pivot) {
+        var bar = new THREE.Mesh(barGeo, barM);
+        bar.position.y = 1.62 - cfg.tireR;
+        bar.visible = false;
+        pivot.add(bar);
+        bars.push(bar);
+      });
+    }
+
+    function update(pose, carCfg, steer, reverse, radar) {
+      /* 弧线画车头/车尾中点的轨迹（随档位定起点与方向）：以后轴为参考积分
+       * （与 physics.js/倒影弧线同式，dir=-1 即倒退），每步先把画线点沿当前
+       * 航向推到 bumper，再步进后轴——弯曲程度即"这把方向够不够" */
+      var rearOH = carCfg.length - carCfg.frontOverhang - carCfg.wheelbase;
+      var dRear = carCfg.frontOverhang + carCfg.wheelbase - carCfg.length / 2;
+      var dir = reverse ? -1 : 1;
+      var off = reverse ? -rearOH : carCfg.frontOverhang + carCfg.wheelbase;
+      var h = pose.heading;
+      var ax = pose.x - Math.sin(h) * dRear, az = pose.z - Math.cos(h) * dRear;
+      var pos = geo.attributes.position.array;
+      var ds = LEN / (N - 1);
+      for (var i = 0; i < N; i++) {
+        pos[i * 3] = ax + Math.sin(h) * off;
+        pos[i * 3 + 1] = 0.08;
+        pos[i * 3 + 2] = az + Math.cos(h) * off;
+        h += dir * Math.tan(steer) / carCfg.wheelbase * ds;
+        ax += dir * Math.sin(h) * ds;
+        az += dir * Math.cos(h) * ds;
+      }
+      geo.attributes.position.needsUpdate = true;
+      var col = (reverse && radar != null)
+        ? (radar < RAD.urgent ? 0xff4a30 : radar < RAD.range ? 0xffc93f : 0x35d06a)
+        : 0x35d06a;
+      if (mat.color.getHex() !== col) mat.color.setHex(col);
+    }
+
+    return {
+      line: line, bars: bars,
+      update: update,
+      setVisible: function (v) {
+        line.visible = v;
+        for (var i = 0; i < bars.length; i++) bars[i].visible = v;
+      },
+      dispose: function () {
+        scene.remove(line);
+        geo.dispose(); mat.dispose();
+        /* 标线是前轮 pivot 子对象：先摘下再释放，不依赖 rig.dispose 的深释放顺序 */
+        bars.forEach(function (b) { if (b.parent) b.parent.remove(b); });
+        barGeo.dispose(); barM.dispose();
+      }
+    };
+  }
+
   /** 倒车雷达：车尾横向采样点到障碍物 OBB 的最近距离 */
   function rearDistance(carPose, carCfg, obstacles) {
     var h = carPose.heading, c = Math.cos(h), s = Math.sin(h);
@@ -207,5 +289,5 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     };
   }
 
-  return { createGuideLine: createGuideLine, createRevGuideLine: createRevGuideLine, rearDistance: rearDistance, createAudio: createAudio };
+  return { createGuideLine: createGuideLine, createRevGuideLine: createRevGuideLine, createTopGuide: createTopGuide, rearDistance: rearDistance, createAudio: createAudio };
 });

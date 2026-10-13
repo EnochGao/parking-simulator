@@ -252,6 +252,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     if (!lv) return;
     if (this.worldH) { this.worldH.dispose(); this.worldH = null; }
     if (this.guide) { this.guide.dispose(); this.guide = null; }
+    if (this.topGuide) { this.topGuide.dispose(); this.topGuide = null; }   // 标线挂在前轮 pivot 上，须先于 rig 摘除
     if (this.rig) { this.rig.dispose(); this.rig = null; }
     this.level = lv;
     this.mode = mode || 'play';
@@ -285,6 +286,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     });
     var self = this;
     this.rig.onDirty = function () { self._mirrorsDirty = true; };
+
+    /* 俯视转向辅助：前轮转角标线 + 预测轨迹弧（正交俯视下前轮被车身遮挡，见 assist.js） */
+    this.topGuide = PS.Assist.createTopGuide(this.scene, this.rig.car, this.cfg.CAR);
 
     /* 物理与一局（规则与无头回归同一实现） */
     this.carP = new PS.Physics.CarPhysics({ car: this.cfg.CAR, phys: this.cfg.PHYS }, {
@@ -870,6 +874,16 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       this.topCamera.position.set(carP.x, 42, carP.z);
       this.topCamera.up.set(Math.sin(this._topYaw), 0, Math.cos(this._topYaw));
       this.topCamera.lookAt(carP.x, 0, carP.z);
+    }
+
+    /* 俯视转向辅助：标线/轨迹弧仅俯视可见；弧线随档位从车头/车尾画出，
+     * R 档颜色随雷达距离分级（radar 仅 R 档非空，与 HUD 雷达同源） */
+    if (this.topGuide) {
+      this.topGuide.setVisible(this.assist.top);
+      if (this.assist.top) {
+        var rev = carP.gear === 'R';
+        this.topGuide.update(carP, this.cfg.CAR, carP.steer, rev, rev ? this.radar : null);
+      }
     }
 
     /* 地库天顶组：俯视上帝视角时隐藏，否则天花板挡住整个俯视画面 */
