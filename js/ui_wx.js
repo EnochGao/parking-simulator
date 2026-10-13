@@ -696,12 +696,16 @@
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(b.angle * Math.PI / 180);
+    /* 双幅式辐条 + 宽幅胶囊轮毂 + 12 点黄色回正标线——与座舱 3D 方向盘（GR9
+     * 双幅式）同款，无 T 型下辐条（规格同 style.css .tc-wheel-face） */
+    var ri = r - 12;                       // 辐条/轮毂基准半径（轮缘内沿）
     ctx.fillStyle = 'rgba(232,234,238,.72)';
-    ctx.fillRect(-(r - 12), -(r - 12) * 0.09, (r - 12) * 0.95, (r - 12) * 0.18);   // 左辐条
-    ctx.fillRect((r - 12) * 0.05, -(r - 12) * 0.09, (r - 12) * 0.95, (r - 12) * 0.18); // 右辐条
-    ctx.fillRect(-(r - 12) * 0.09, 0, (r - 12) * 0.18, (r - 12) * 0.62);            // 下辐条
-    ctx.fillStyle = 'rgba(111,214,111,.82)';
-    ctx.beginPath(); ctx.arc(0, 0, (r - 12) * 0.2, 0, Math.PI * 2); ctx.fill();     // 中央徽标
+    ctx.fillRect(-ri, -ri * 0.09, ri * 0.95, ri * 0.18);        // 左辐条
+    ctx.fillRect(ri * 0.05, -ri * 0.09, ri * 0.95, ri * 0.18);  // 右辐条
+    ctx.fillStyle = '#ffd23f';                                  // 12 点回正标线
+    ctx.fillRect(-ri * 0.035, -ri, ri * 0.07, ri * 0.13);
+    ctx.fillStyle = 'rgba(111,214,111,.82)';                    // 宽幅胶囊轮毂
+    rr(ctx, -ri * 0.38, -ri * 0.09, ri * 0.76, ri * 0.18, ri * 0.09); ctx.fill();
     ctx.restore();
     f(ctx, 10, '');
     ctx.fillStyle = 'rgba(232,234,238,.65)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -977,9 +981,9 @@
     drive('w', '▲', '前进', 'w');
     drive('s', '▼', '倒车', 's');
     drive('space', '⏹', '手刹', 'space');
-    /* 按住看镜（与键盘 Z/X 同语义） */
-    tc.buttons.push({ id: 'lml', label: '左镜', cap: '按住看', grp: 'look', look: 1, held: false, on: false, x: 0, y: 0, w: 46, h: 46 });
-    tc.buttons.push({ id: 'lmr', label: '右镜', cap: '按住看', grp: 'look', look: 2, held: false, on: false, x: 0, y: 0, w: 46, h: 46 });
+    /* 按住看镜（与键盘 Z/X 同语义）。46px 小钮只留镜名（曾加"按住看"小字叠字，删） */
+    tc.buttons.push({ id: 'lml', label: '左镜', cap: '', grp: 'look', look: 1, held: false, on: false, x: 0, y: 0, w: 46, h: 46 });
+    tc.buttons.push({ id: 'lmr', label: '右镜', cap: '', grp: 'look', look: 2, held: false, on: false, x: 0, y: 0, w: 46, h: 46 });
     fn('pause', '⏸', function () {
       if (game.state === 'playing') game.pause();
       else if (game.state === 'paused') game.resume();

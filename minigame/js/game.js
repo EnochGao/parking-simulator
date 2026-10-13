@@ -419,7 +419,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       w.className = 'tc-wheel';
       var face = document.createElement('div');
       face.className = 'tc-wheel-face';
-      face.innerHTML = '<i class="sp sp-l"></i><i class="sp sp-r"></i><i class="sp sp-b"></i><b></b>';
+      /* 双幅式（GR9 同款座舱方向盘）：无 T 型下辐条——左右两根水平辐条 +
+       * 宽幅胶囊轮毂 + 12 点黄色回正标线（mark），样式见 style.css .tc-wheel-face */
+      face.innerHTML = '<i class="mark"></i><i class="sp sp-l"></i><i class="sp sp-r"></i><b></b>';
       w.appendChild(face);
       var cap = document.createElement('small');
       cap.textContent = '方向盘 · 双击回正';
@@ -462,11 +464,12 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       return w;
     }
 
-    /** 按住看镜钮（左镜/右镜）：按住 = 转头看对应外后视镜（与键盘 Z/X 同语义） */
+    /** 按住看镜钮（左镜/右镜）：按住 = 转头看对应外后视镜（与键盘 Z/X 同语义）。
+     *  46px 小钮只留镜名——曾加"按住看"小字与镜名叠字（真机反馈），删 */
     function lookBtn(cls, label, side) {
       var b = document.createElement('div');
       b.className = 'tc-btn fn ' + cls;
-      b.innerHTML = label + '<small>按住看</small>';
+      b.textContent = label;
       var on = function (e) {
         e.preventDefault();
         self.audio.unlock();

@@ -10,6 +10,6 @@
     "turn": "node tools/turn_check.js",
     "solver": "node tools/solver.js",
     "build:wx": "node tools/build_wx.js",
-    "test:wx": "node tools/build_wx.js --smoke && node tests/wx_bundle_test.js"
+    "test:wx": "node tools/build_wx.js --smoke && node tests/wx_bundle_test.js && node tools/build_wx.js"
   }
 }

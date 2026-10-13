@@ -100,7 +100,9 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
 .tc-btn.drive:active { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
 .tc-btn.fn { width: 46px; height: 46px; font-size: 15px; }
 .tc-btn.fn.on { background: rgba(111,214,111,.4); border-color: #6fd66f; color: #c9f2cf; }
-/* 模拟量方向盘（v2：替换 ◀▶ 转向键）。轮缘+辐条纯 CSS，拖动旋转 ±135°=满打 */
+/* 模拟量方向盘（v2：替换 ◀▶ 转向键）。轮缘+辐条纯 CSS，拖动旋转 ±270°=满打。
+ * 双幅式辐条 + 宽幅胶囊轮毂 + 12 点黄色回正标线——与座舱 3D 方向盘（飞度 GR9
+ * 双幅式）同款，无 T 型下辐条 */
 .tc-wheel { position: absolute; pointer-events: auto; touch-action: none; user-select: none;
   left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(34px + env(safe-area-inset-bottom, 0px));
   width: 128px; height: 128px; border-radius: 50%; }
@@ -111,8 +113,10 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
 .tc-wheel-face .sp { position: absolute; background: rgba(232,234,238,.72); border-radius: 3px; }
 .tc-wheel-face .sp-l { left: 14%; top: 45.5%; width: 34%; height: 9%; }
 .tc-wheel-face .sp-r { right: 14%; top: 45.5%; width: 34%; height: 9%; }
-.tc-wheel-face .sp-b { left: 46.5%; top: 50%; width: 7%; height: 30%; }
-.tc-wheel-face b { position: absolute; left: 40%; top: 40%; width: 20%; height: 20%; border-radius: 50%; background: #6fd66fd0; }
+.tc-wheel-face .mark { position: absolute; left: 46.5%; top: 1%; width: 7%; height: 7%;
+  background: #ffd23f; border-radius: 2px; }
+.tc-wheel-face b { position: absolute; left: 33%; top: 41%; width: 34%; height: 18%;
+  border-radius: 999px; background: #6fd66fd0; }
 .tc-wheel small { position: absolute; left: -10px; right: -10px; bottom: -19px; text-align: center;
   font-size: 10px; font-weight: 400; color: rgba(232,234,238,.65); pointer-events: none; }
 /* 右下油门-倒车-手刹（倒车在最外——泊车主操作）；env() 为刘海屏安全区 */
