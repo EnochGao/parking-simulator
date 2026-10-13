@@ -370,6 +370,13 @@
     var self = this;
     var root = document.createElement('div');
     root.className = 'touch-controls';
+    /* 驾驶态显示标志：菜单/简报/暂停/结算等叠加态隐藏整个虚拟控件层。
+     * 调镜面板的 250ms 轮询 sync 也走 syncTc——否则无条件 '' 会把隐藏的层
+     * 重新显示到主菜单上（仅驾驶态显示的约定见 setTouchControlsVisible） */
+    var tcOn = false;
+    function syncTc() {
+      root.style.display = self.mirrorMode ? 'none' : (tcOn ? '' : 'none');
+    }
 
     /** 驾驶键：label 主图标 + cap 小字；key 对应 this.keys 字段 */
     function driveBtn(cls, label, cap, key) {
@@ -527,7 +534,7 @@
 
       function sync() {
         p.style.display = self.mirrorMode ? '' : 'none';
-        root.style.display = self.mirrorMode ? 'none' : '';
+        syncTc();
         if (self.mirrorMode) syncChips();
       }
       /* V 键退出/进入调节模式也要同步面板（250ms 轮询，开销可忽略） */
@@ -576,7 +583,7 @@
     this.container.appendChild(root);
     this._touchUI = root;
     /* 跨实现契约：wx canvas 实现注册同一回调（PS.Ui.setTouchControlsVisible 消费） */
-    this._tcSetVisible = function (v) { root.style.display = v ? '' : 'none'; };
+    this._tcSetVisible = function (v) { tcOn = v; syncTc(); };
     this.PS.Ui.setTouchControlsVisible(this, false);   // 菜单/简报态先隐藏，进入驾驶再显示
     this.syncTouchFnButtons();
   };
