@@ -570,7 +570,13 @@
       c: fnBtn('tc-c', '影', function () { self.toggleRevCam(); })
     };
     for (var fk in this._tcFns) fnEls.push(this._tcFns[fk].el);
-    fnEls.push(fnBtn('tc-madj', '调镜', function () { self.mirrorMode = true; }).el);
+    var madjEl = fnBtn('tc-madj', '调镜', function () { self.mirrorMode = true; }).el;
+    fnEls.push(madjEl);
+    /* 俯视时后视镜不可见，调镜无意义 → 隐藏调镜钮（挂 俯 钮 setOn：toggleTop
+     * 与 buildTouchControls 末尾的 syncTouchFnButtons 初始同步都走此路径）。
+     * 用 display 而非 visibility——_tcLookSync 恢复整排 visibility 时不会把它带回来 */
+    var mSetOn = this._tcFns.m.setOn;
+    this._tcFns.m.setOn = function (on) { mSetOn(on); madjEl.style.display = on ? 'none' : ''; };
     this._tcLookSync = function (on) {
       var hide = !!on;
       if (root.__fnHidden === hide) return;

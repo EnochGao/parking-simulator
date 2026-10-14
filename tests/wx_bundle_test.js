@@ -139,6 +139,7 @@ var fakeGame = {
   keys: {}, state: 'menu', cfg: PS.CONFIG,
   touchAnalog: { steer: 0 },   // 触屏方向盘模拟量（ui_wx 方向盘写入）
   lookHeld: 0, mirrorMode: false, mirrorSel: 0,
+  assist: { guide: true, top: false, revCam: true },   // 辅助开关态（俯视 top 控制调镜钮可见性）
   audio: { unlock: function () {} },
   pause: function () {}, resume: function () {},
   toggleGuide: function () {}, toggleTop: function () {}, toggleRevCam: function () {}
@@ -289,6 +290,18 @@ check('完成 → 退出调节模式', fakeGame.mirrorMode === false);
 PS.UiWx.__dispatch('start', { touches: [{ identifier: 27, clientX: wb.x + 38, clientY: wb.y + 38 }], changedTouches: [{ identifier: 27, clientX: wb.x + 38, clientY: wb.y + 38 }] });
 check('退出后驾驶键恢复可触', fakeGame.keys.w === true);
 PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 27, clientX: wb.x + 38, clientY: wb.y + 38 }] });
+/* 俯视开启时调镜钮隐藏不可触（俯视下后视镜不可见，调镜无意义）；关闭俯视恢复 */
+fakeGame.assist.top = true;
+PS.UiWx.__dispatch('start', { touches: [{ identifier: 32, clientX: madj.x + 23, clientY: madj.y + 23 }], changedTouches: [{ identifier: 32, clientX: madj.x + 23, clientY: madj.y + 23 }] });
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 32, clientX: madj.x + 23, clientY: madj.y + 23 }] });
+check('俯视时调镜钮隐藏不可触（不进入调节模式）', fakeGame.mirrorMode === false);
+fakeGame.assist.top = false;
+PS.UiWx.__dispatch('start', { touches: [{ identifier: 33, clientX: madj.x + 23, clientY: madj.y + 23 }], changedTouches: [{ identifier: 33, clientX: madj.x + 23, clientY: madj.y + 23 }] });
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 33, clientX: madj.x + 23, clientY: madj.y + 23 }] });
+check('关闭俯视后调镜钮恢复可触', fakeGame.mirrorMode === true);
+PS.UiWx.__dispatch('start', { touches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }], changedTouches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }] });
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }] });
+check('恢复后再点完成退出调节模式', fakeGame.mirrorMode === false);
 
 console.log('\n== HUD 数值面 ==');
 hud.showHud({ name: '侧方位停车', tips: ['先对齐'] }, { maxColl: 5 });

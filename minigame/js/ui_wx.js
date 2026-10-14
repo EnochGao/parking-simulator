@@ -229,10 +229,12 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     ctx.translate(0, -s.viewY);
     var fn = DRAWERS[s.kind];
     if (fn) fn(ctx, s, m);
-    /* 按钮（统一绘制器：普通/大按钮/按下高亮） */
+    /* 按钮（统一绘制器：普通/大按钮/按下高亮）。
+     * 选关卡片 widget（label 空、card 标记）仅作命中区——外观由 select drawer 绘制，
+     * 曾未跳过而被 drawButton 以不透明空标签底重涂，卡片编号/名称/星星全部被盖（"选关全空"） */
     for (var i = 0; i < s.widgets.length; i++) {
       var w = s.widgets[i];
-      if (w.hidden) continue;
+      if (w.hidden || w.card) continue;
       drawButton(ctx, w, u.pressed && u.pressed.widget === w);
     }
     ctx.restore();
@@ -1043,13 +1045,15 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
   /** 触屏按钮可见性：调镜模式下驾驶/看镜/功能组隐藏，镜像面板组替换显示；
    *  非调镜态镜像面板组一律隐藏（曾漏此分支，选镜chips/方向箭头/完成钮
    *  常驻驾驶画面——真机反馈）；按住看镜（左/右）时功能组隐藏——车内镜画面
-   *  会扫到画面顶部，避免遮挡与误触 */
+   *  会扫到画面顶部，避免遮挡与误触；俯视时调镜钮隐藏——后视镜不可见，
+   *  调节无意义（madj 在功能行末位，隐藏即行尾缩短，无需重排） */
   function tcBtnVisible(b) {
     if (!cur.tc.visible) return false;
     var mm = cur.game && cur.game.mirrorMode;
     if (mm) return b.grp === 'mirror';
     if (b.grp === 'mirror') return false;
     if (b.grp === 'fn' && cur.game && cur.game.lookHeld) return false;
+    if (b.id === 'madj' && cur.game && cur.game.assist && cur.game.assist.top) return false;
     return true;
   }
 
