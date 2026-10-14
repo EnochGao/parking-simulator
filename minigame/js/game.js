@@ -930,6 +930,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     /* 地库天顶组：俯视上帝视角时隐藏，否则天花板挡住整个俯视画面 */
     if (this.worldH && this.worldH.roof) this.worldH.roof.visible = !this.assist.top;
 
+    /* 目标车位黄标呼吸脉冲（标出目标位，玩家一眼知道往哪停）；elapsed 为秒 */
+    if (this.worldH && this.worldH.tick) this.worldH.tick(elapsed);
+
     /* 倒车影像显隐（俯视上帝视角时隐藏，避免屏幕悬在车顶上方）
      * + 动态引导线：按当前前轮角预测车尾轨迹（assist.js），颜色随雷达距离分级 */
     if (this.rig.mirrorH) {

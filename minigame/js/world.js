@@ -26,25 +26,77 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     group.add(ground);
     disposables.push(ground.geometry, groundMat);
 
-    /* --- 车位标线（现实风格：白色边线，入口侧开口，无填充） --- */
+    /* --- 目标车位标线（白边框 + 黄色四角 + 地面 P 标，帮助玩家一眼找到目标位） ---
+     * 平面旋转经数值验证（绕 X 轴 −90° 后 rotation.z 的地面朝向是镜像映射）：
+     *   长边沿泊车方向 forward=(sinA,cosA) → rotation.z = A−π/2
+     *   横边沿车位宽度 right=(cosA,−sinA) → rotation.z = A
+     *   P 字在入口方向正读（字头朝库里）→ rotation.z = A+π（平面法线朝上，无镜像）
+     * 旧实现三条线统一 z=−A（宽度方向），侧边长线被画横、部分角度下穿库 —— 已修 */
+    var spotTick = null;
     (function () {
       var s = level.spot, a = s.a * D2R;
       var fx = Math.sin(a), fz = Math.cos(a), rx = Math.cos(a), rz = -Math.sin(a);
       var hw = s.w / 2, hl = s.l / 2;
-      // 白色标线（线宽约 12cm，接近真实车位划线）
-      var lineM = new THREE.MeshBasicMaterial({ color: 0xe8eaec });
-      function strip(cx, cz, len, wid) { // 沿泊车方向 len × 垂直 wid
-        var m = new THREE.Mesh(new THREE.PlaneGeometry(len, wid), lineM);
+      var AMBER = 0xffc93f;   // 与 assist.js 雷达预警同色系：绿色=轨迹引导，黄色=目标位
+      var lineM = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      var markM = new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: 1 });
+      function strip(cx, cz, len, wid, zRot, mat, y) { // len 沿 zRot 指定方向
+        var m = new THREE.Mesh(new THREE.PlaneGeometry(len, wid), mat);
         m.rotation.x = -Math.PI / 2;
-        m.rotation.z = -a; // 平面旋转到车位朝向
-        m.position.set(cx, 0.03, cz);
+        m.rotation.z = zRot;
+        m.position.set(cx, y, cz);
         group.add(m);
         disposables.push(m.geometry);
       }
-      strip(s.x + rx * hw, s.z + rz * hw, s.l, 0.12);
-      strip(s.x - rx * hw, s.z - rz * hw, s.l, 0.12);
-      strip(s.x + fx * hl, s.z + fz * hl, s.w + 0.12, 0.12);
-      disposables.push(lineM);
+      var Y_LINE = 0.03, Y_MARK = 0.032, Y_P = 0.034;  // 逐层抬高 2mm 防贴片互揍 z-fight
+      /* 白色边框（线宽 12cm，现实划线风格；入口侧开口） */
+      strip(s.x + rx * hw, s.z + rz * hw, s.l, 0.12, a - Math.PI / 2, lineM, Y_LINE);
+      strip(s.x - rx * hw, s.z - rz * hw, s.l, 0.12, a - Math.PI / 2, lineM, Y_LINE);
+      strip(s.x + fx * hl, s.z + fz * hl, s.w + 0.12, 0.12, a, lineM, Y_LINE);
+      /* 黄色四角括号：从车位四角向内 0.6m 的 L 形标（目标位高亮，区别于普通白线） */
+      var INSET = 0.3, ARM = 0.6;
+      [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(function (sg) {   // [沿right符号, 沿forward符号]
+        var cx = s.x + rx * (hw - INSET) * sg[0] + fx * (hl - INSET) * sg[1];
+        var cz = s.z + rz * (hw - INSET) * sg[0] + fz * (hl - INSET) * sg[1];
+        strip(cx - fx * ARM / 2 * sg[1], cz - fz * ARM / 2 * sg[1], ARM, 0.1, a - Math.PI / 2, markM, Y_MARK);
+        strip(cx - rx * ARM / 2 * sg[0], cz - rz * ARM / 2 * sg[0], ARM, 0.1, a, markM, Y_MARK);
+      });
+      /* 地面 P 字：路径手绘（不依赖平台字体），白色笔划 + 材质染黄，随角标同步呼吸 */
+      (function () {
+        var PLAT = (typeof window !== 'undefined' && window.PS && window.PS.Platform) ||
+                   (typeof self !== 'undefined' && self.PS && self.PS.Platform);
+        var c = PLAT ? PLAT.createCanvas() : document.createElement('canvas');
+        c.width = c.height = 256;
+        var x = c.getContext('2d');
+        x.fillStyle = '#ffffff';
+        x.fillRect(70, 40, 48, 182);                       // 竖笔
+        x.beginPath();                                     // 碗形（右半圆环）
+        x.moveTo(118, 40);
+        x.arc(118, 102, 62, -Math.PI / 2, Math.PI / 2);
+        x.lineTo(118, 122);
+        x.arc(118, 102, 20, Math.PI / 2, -Math.PI / 2, true);
+        x.closePath();
+        x.fill();
+        var pt = new THREE.CanvasTexture(c);
+        pt.anisotropy = 4;
+        var pM = new THREE.MeshBasicMaterial({ map: pt, color: AMBER, transparent: true, opacity: 1 });
+        var sz = Math.min(s.w * 0.7, s.l * 0.42);
+        var pm = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), pM);
+        pm.rotation.x = -Math.PI / 2;
+        pm.rotation.z = a + Math.PI;   // P 正对入口方向可读
+        pm.position.set(s.x, Y_P, s.z);
+        group.add(pm);
+        disposables.push(pm.geometry, pM, pt);
+        /* 呼吸脉冲：黄标 0.55↔1 循环渐变（约 1.75s 周期），静止画面也醒目；
+         * game.js updateVisuals 每帧调 tick(elapsed)，未接（如静态工具）时保持全亮 */
+        var t = 0;
+        spotTick = function (dt) {
+          t += dt;
+          var o = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 3.6));
+          markM.opacity = o; pM.opacity = o;
+        };
+      })();
+      disposables.push(lineM, markM);
     })();
 
     /* --- 障碍物 --- */
@@ -139,6 +191,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     return {
       group: group,
       roof: roof,   // 地库天顶组（俯视图时由 game.js 隐藏）；非地库关为 null
+      tick: spotTick,   // 目标位黄标呼吸脉冲（game.js updateVisuals 每帧调，秒）
       dispose: function () {
         group.parent && group.parent.remove(group);
         disposables.forEach(function (d) { d.dispose && d.dispose(); });
