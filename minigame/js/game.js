@@ -203,11 +203,14 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       if (e.code === 'Period' && self._topRot === 1) self._topRot = 0;
     });
 
-    /* 俯视镜头手势：鼠标拖拽 / 触屏双指拧。抓地图手感——手往哪边拉/拧，画面跟着转
-     * （实测标定：yaw 增 = 画面顺时针；拖右/顺拧应让世界顺时针，故取正增量）。
-     * 触摸事件走 platform 归一化总线（网页 canvas 事件 / 小游戏全局触摸分发同构） */
+    /* 俯视镜头手势：鼠标拖拽 / 触屏单指横拖（移动端浏览器）/ 双指拧。抓地图手感——
+     * 手往哪边拉/拧，画面跟着转（实测标定：yaw 增 = 画面顺时针；拖右/顺拧应让世界
+     * 顺时针，故取正增量）。触摸事件走 platform 归一化总线（网页 canvas 事件 /
+     * 小游戏全局触摸分发同构）；单指横拖仅网页端在此处理——小游戏端无 target
+     * 信息（总线收全屏触摸，分不出是否压在虚拟键上），由 ui_wx 按控件命中
+     * 判定空白触点后调 rotateTopCamera，逻辑同源 */
     var canvas = this.renderer.domElement;
-    var drag = null, twist = null;
+    var drag = null, twist = null, tdrag = null;
     PLAT.onCanvasMouse(canvas, {
       down: function (e) {
         if (e.button !== 0 || !self.assist.top || self.state !== 'playing') return;
@@ -228,20 +231,35 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       start: function (e) {
         if (e.touches.length === 2 && self.assist.top && self.state === 'playing') {
           twist = { a: twistAngle(e.touches), ids: [e.touches[0].identifier, e.touches[1].identifier] };
+          tdrag = null;   // 双指拧接管，单指拖拽让位
           e.preventDefault();   // 拧动期间屏蔽浏览器双指缩放
-        } else twist = null;
+        } else {
+          twist = null;
+          /* 单指横拖与 PC 鼠标拖拽同源同灵敏度。网页端虚拟键是独立 DOM 元素，
+           * 事件 target=canvas 即空白处，不会与按键冲突 */
+          tdrag = (PLAT.isWeb && e.touches.length === 1 && self.assist.top && self.state === 'playing')
+            ? { x: e.touches[0].clientX, id: e.touches[0].identifier } : null;
+        }
       },
       move: function (e) {
-        if (!twist || e.touches.length !== 2 ||
-            e.touches[0].identifier !== twist.ids[0] || e.touches[1].identifier !== twist.ids[1]) return;
-        var a = twistAngle(e.touches), da = a - twist.a;
-        if (da > Math.PI) da -= 2 * Math.PI;    // 跨 ±π 跳变保护
-        if (da < -Math.PI) da += 2 * Math.PI;
-        twist.a = a;
-        self.rotateTopCamera(da);
-        e.preventDefault();
+        if (twist && e.touches.length === 2 &&
+            e.touches[0].identifier === twist.ids[0] && e.touches[1].identifier === twist.ids[1]) {
+          var a = twistAngle(e.touches), da = a - twist.a;
+          if (da > Math.PI) da -= 2 * Math.PI;    // 跨 ±π 跳变保护
+          if (da < -Math.PI) da += 2 * Math.PI;
+          twist.a = a;
+          self.rotateTopCamera(da);
+          e.preventDefault();
+          return;
+        }
+        if (tdrag && e.touches.length === 1 && e.touches[0].identifier === tdrag.id) {
+          var tdx = e.touches[0].clientX - tdrag.x;
+          tdrag.x = e.touches[0].clientX;
+          self.rotateTopCamera(tdx * self.cfg.VIEW_TOP.dragRate * Math.PI / 180);
+          e.preventDefault();
+        }
       },
-      end: function () { twist = null; }
+      end: function () { twist = null; tdrag = null; }
     });
   };
 
@@ -555,8 +573,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     // 左下：模拟量方向盘（抓轮缘打轮，圈数与座舱方向盘 1:1，松手保持——与键盘一致）；
     // 轮右侧：按住看镜；右下：油门/倒车（倒车放最外——泊车主操作）+ 手刹
     steerWheel();
-    lookBtn('tc-lml', '左镜', 1);
-    lookBtn('tc-lmr', '右镜', 2);
+    var lookEls = [lookBtn('tc-lml', '左镜', 1), lookBtn('tc-lmr', '右镜', 2)];
     driveBtn('tc-w', '▲', '前进', 'w');
     driveBtn('tc-s', '▼', '倒车', 's');
     driveBtn('tc-space', '⏹', '手刹', 'space');
@@ -576,11 +593,17 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     for (var fk in this._tcFns) fnEls.push(this._tcFns[fk].el);
     var madjEl = fnBtn('tc-madj', '调镜', function () { self.mirrorMode = true; }).el;
     fnEls.push(madjEl);
-    /* 俯视时后视镜不可见，调镜无意义 → 隐藏调镜钮（挂 俯 钮 setOn：toggleTop
-     * 与 buildTouchControls 末尾的 syncTouchFnButtons 初始同步都走此路径）。
-     * 用 display 而非 visibility——_tcLookSync 恢复整排 visibility 时不会把它带回来 */
+    /* 俯视时后视镜不可见，调镜/转头看镜无意义 → 隐藏调镜钮与左右看镜钮（挂 俯 钮
+     * setOn：toggleTop 与 buildTouchControls 末尾的 syncTouchFnButtons 初始
+     * 同步都走此路径）。用 display 而非 visibility——_tcLookSync 恢复整排
+     * visibility 时不会把它们带回来 */
     var mSetOn = this._tcFns.m.setOn;
-    this._tcFns.m.setOn = function (on) { mSetOn(on); madjEl.style.display = on ? 'none' : ''; };
+    this._tcFns.m.setOn = function (on) {
+      mSetOn(on);
+      var d = on ? 'none' : '';
+      madjEl.style.display = d;
+      for (var li = 0; li < lookEls.length; li++) lookEls[li].style.display = d;
+    };
     this._tcLookSync = function (on) {
       var hide = !!on;
       if (root.__fnHidden === hide) return;

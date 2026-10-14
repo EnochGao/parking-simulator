@@ -734,6 +734,7 @@
   function onTouchStart(ev) {
     if (!cur) return;
     var ts = ev.changedTouches;
+    if (ev.touches.length > 1) cur.tc.camDrag = null;   // 双指落下让位给双指拧镜头（game.js 扭转手势）
     for (var i = 0; i < ts.length; i++) {
       var p = pt(ts[i]), id = ts[i].identifier;
       if (cur.screen) {   // 全屏界面优先：按钮抬起触发，空白处拖动滚动
@@ -785,6 +786,16 @@
             if (cur.hudApi && cur.hudApi.onAudioToggle) cur.hudApi.onAudioToggle();
           }
         }
+        /* 俯视空白处单指横拖调镜头（与 PC 鼠标拖拽同源同灵敏度）：该指未命中
+         * 任何控件/HUD音效chip 才启动；游戏端 rotateTopCamera 已有"手动过即
+         * 挂起自动跟随"，拖拽期间按住驾驶键不受影响（多点各键独立） */
+        var ar = cur.hud.visible && cur.hud.audioRect ? cur.hud.audioRect : null;
+        var grabbed = (ar && p.x >= ar.x && p.x <= ar.x + ar.w && p.y >= ar.y && p.y <= ar.y + ar.h) ||
+          !!cur.tc.holds[id] || (cur.pressed && cur.pressed.id === id) ||
+          (cur.tc.wheelGrab && cur.tc.wheelGrab.id === id);
+        if (!grabbed && ev.touches.length === 1 && cur.game.state === 'playing' &&
+            cur.game.assist && cur.game.assist.top)
+          cur.tc.camDrag = { id: id, x: p.x };
       } else if (cur.hud.visible && cur.hud.audioRect) {   // 键盘设备菜单态等边缘情形
         var a2 = cur.hud.audioRect;
         if (p.x >= a2.x && p.x <= a2.x + a2.w && p.y >= a2.y && p.y <= a2.y + a2.h) {
@@ -828,6 +839,14 @@
           delete cur.tc.holds[id];
           cur.dirty = true;
         }
+      } else if (cur.tc.camDrag && cur.tc.camDrag.id === id && cur.tc.visible &&
+                 cur.game.state === 'playing' && cur.game.assist && cur.game.assist.top) {
+        /* 镜头跟指横拖：dx → yaw（dragRate °/px 与 PC 鼠标拖拽同源）。
+         * 俯视半途关闭/暂停则静默丢弃（抬起即清） */
+        var dxc = p.x - cur.tc.camDrag.x;
+        cur.tc.camDrag.x = p.x;
+        if (cur.game.rotateTopCamera)
+          cur.game.rotateTopCamera(dxc * cur.game.cfg.VIEW_TOP.dragRate * Math.PI / 180);
       }
     }
   }
@@ -838,6 +857,7 @@
     for (var i = 0; i < ts.length; i++) {
       var p = pt(ts[i]), id = ts[i].identifier;
       if (cur.tc.wheelGrab && cur.tc.wheelGrab.id === id) cur.tc.wheelGrab = null;   // 松轮保持转角
+      if (cur.tc.camDrag && cur.tc.camDrag.id === id) cur.tc.camDrag = null;   // 松手结束镜头拖拽
       if (cur.tc.holds[id]) {   // 驾驶键/看镜钮/方向钮抬起
         var b = cur.tc.holds[id];
         b.held = false;
@@ -1028,6 +1048,7 @@
   /** 释放所有按住态（进入/退出调节模式时防键位卡死） */
   function releaseAll() {
     var tc = cur.tc;
+    tc.camDrag = null;   // 镜头拖拽一并终止
     for (var k in tc.holds) {
       var b = tc.holds[k];
       b.held = false;
@@ -1041,15 +1062,16 @@
   /** 触屏按钮可见性：调镜模式下驾驶/看镜/功能组隐藏，镜像面板组替换显示；
    *  非调镜态镜像面板组一律隐藏（曾漏此分支，选镜chips/方向箭头/完成钮
    *  常驻驾驶画面——真机反馈）；按住看镜（左/右）时功能组隐藏——车内镜画面
-   *  会扫到画面顶部，避免遮挡与误触；俯视时调镜钮隐藏——后视镜不可见，
-   *  调节无意义（madj 在功能行末位，隐藏即行尾缩短，无需重排） */
+   *  会扫到画面顶部，避免遮挡与误触；俯视时调镜/看镜钮隐藏——上帝视角下
+   *  后视镜不可见，调节与转头看镜均无意义（madj 在功能行末位、lml/lmr 在
+   *  方向盘上方，隐藏后其余按钮位置不动） */
   function tcBtnVisible(b) {
     if (!cur.tc.visible) return false;
     var mm = cur.game && cur.game.mirrorMode;
     if (mm) return b.grp === 'mirror';
     if (b.grp === 'mirror') return false;
     if (b.grp === 'fn' && cur.game && cur.game.lookHeld) return false;
-    if (b.id === 'madj' && cur.game && cur.game.assist && cur.game.assist.top) return false;
+    if ((b.id === 'madj' || b.grp === 'look') && cur.game && cur.game.assist && cur.game.assist.top) return false;
     return true;
   }
 

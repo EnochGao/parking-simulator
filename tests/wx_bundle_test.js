@@ -139,10 +139,11 @@ var fakeGame = {
   keys: {}, state: 'menu', cfg: PS.CONFIG,
   touchAnalog: { steer: 0 },   // 触屏方向盘模拟量（ui_wx 方向盘写入）
   lookHeld: 0, mirrorMode: false, mirrorSel: 0,
-  assist: { guide: true, top: false, revCam: true },   // 辅助开关态（俯视 top 控制调镜钮可见性）
+  assist: { guide: true, top: false, revCam: true },   // 辅助开关态（俯视 top 控制调镜/看镜钮可见性）
   audio: { unlock: function () {} },
   pause: function () {}, resume: function () {},
-  toggleGuide: function () {}, toggleTop: function () {}, toggleRevCam: function () {}
+  toggleGuide: function () {}, toggleTop: function () {}, toggleRevCam: function () {},
+  rotateTopCamera: function (d) { this._topRotCam = (this._topRotCam || 0) + d; }   // 俯视镜头手动旋转累计（拖拽调镜头用例消费）
 };
 var hud = PS.UiWx.createHud(fakeGame);
 check('createHud 返回全量 API（与 hud.js 对齐）',
@@ -302,6 +303,31 @@ check('关闭俯视后调镜钮恢复可触', fakeGame.mirrorMode === true);
 PS.UiWx.__dispatch('start', { touches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }], changedTouches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }] });
 PS.UiWx.__dispatch('end', { touches: [], changedTouches: [{ identifier: 34, clientX: mdn.x + 56, clientY: mdn.y + 20 }] });
 check('恢复后再点完成退出调节模式', fakeGame.mirrorMode === false);
+/* 俯视时左/右看镜钮隐藏（上帝视角后视镜不可见）；空白处单指横拖调镜头（与 PC 鼠标拖拽同源） */
+fakeGame.assist.top = true;
+var tlT = { identifier: 41, clientX: lml.x + 23, clientY: lml.y + 23 };
+PS.UiWx.__dispatch('start', { touches: [tlT], changedTouches: [tlT] });
+check('俯视时左镜钮隐藏不可触（lookHeld 不置位）', fakeGame.lookHeld === 0);
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [tlT] });
+var cx0 = ui.W / 2, cy0 = ui.H / 2;   // 屏幕中心为空白区（控件都在四角/边缘列）
+var c0 = { identifier: 42, clientX: cx0, clientY: cy0 }, c1 = { identifier: 42, clientX: cx0 + 60, clientY: cy0 };
+PS.UiWx.__dispatch('start', { touches: [c0], changedTouches: [c0] });
+PS.UiWx.__dispatch('move', { touches: [c1], changedTouches: [c1] });
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [c1] });
+check('俯视空白处单指横拖 → 镜头旋转（灵敏度与 PC 鼠标一致）',
+  Math.abs((fakeGame._topRotCam || 0) - 60 * PS.CONFIG.VIEW_TOP.dragRate * Math.PI / 180) < 1e-9);
+fakeGame.assist.top = false;
+var d0 = { identifier: 43, clientX: cx0, clientY: cy0 }, d1 = { identifier: 43, clientX: cx0 - 80, clientY: cy0 };
+PS.UiWx.__dispatch('start', { touches: [d0], changedTouches: [d0] });
+PS.UiWx.__dispatch('move', { touches: [d1], changedTouches: [d1] });
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [d1] });
+check('非俯视态空白拖拽不触发镜头旋转',
+  fakeGame._topRotCam === 60 * PS.CONFIG.VIEW_TOP.dragRate * Math.PI / 180);
+var thR2 = { identifier: 44, clientX: lmr.x + 23, clientY: lmr.y + 23 };
+PS.UiWx.__dispatch('start', { touches: [thR2], changedTouches: [thR2] });
+check('关闭俯视后看镜钮恢复可触（lookHeld=2）', fakeGame.lookHeld === 2);
+PS.UiWx.__dispatch('end', { touches: [], changedTouches: [thR2] });
+check('松开看镜钮 → lookHeld=0', fakeGame.lookHeld === 0);
 
 console.log('\n== HUD 数值面 ==');
 hud.showHud({ name: '侧方位停车', tips: ['先对齐'] }, { maxColl: 5 });
