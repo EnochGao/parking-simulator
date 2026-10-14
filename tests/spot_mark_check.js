@@ -5,7 +5,7 @@
  * - 黄角标：8 条 L 臂全部落在车位框内、且贴近四角
  * - P 字贴片：法线朝上（俯视可读不镜像）、贴片 +Y（字头）指向泊车方向 forward
  * - 车头方向箭头：法线朝上、+Y 指向期望车头方向（演示路径终态车头角，与完成
- *   门禁同源）、画在车位尾部半区（车尾应处的一侧）、整体在车位框内
+ *   门禁同源）、画在 P 字上方的车头半区（箭头位置即车头方向）、整体在车位框内
  * - tick：呼吸脉冲材质透明度始终在 [0.55, 1]（角标/P/箭头三材质同步）
  * 发现错位即打印并以非零码退出 */
 'use strict';
@@ -18,7 +18,8 @@ global.THREE = require(path.join(__dirname, '..', 'vendor', 'three.min.js'));
 global.window = { PS: { Platform: { createCanvas: function () {
   return { width: 0, height: 0, getContext: function () {
     return { fillRect: function () {}, beginPath: function () {}, moveTo: function () {},
-      arc: function () {}, lineTo: function () {}, closePath: function () {}, fill: function () {} };
+      arc: function () {}, lineTo: function () {}, closePath: function () {}, fill: function () {},
+      stroke: function () {} };
   } };
 } } } };
 global.PS = {
@@ -70,7 +71,8 @@ function check() {
       if (m.material.map) {
         var Y = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
         var N = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-        pPlanes.push({ sz: info.len, up: [Y.x, Y.z], normalUp: N.y > 0.999, c: [m.position.x, m.position.z] });
+        pPlanes.push({ sz: info.len, hgt: info.wid, up: [Y.x, Y.z], normalUp: N.y > 0.999, c: [m.position.x, m.position.z],
+          img: m.material.map.image });
       } else strips.push(info);
     });
 
@@ -124,14 +126,21 @@ function check() {
       if (Math.abs(dot(p.up, fwd) - 1) > 1e-6) out.push(id + ': P 字头未指向泊车方向（不正读）');
       if (Math.hypot(p.c[0] - s.x, p.c[1] - s.z) > 0.02) out.push(id + ': P 贴片未居中');
     });
-    /* 4b. 车头方向箭头：1 片、法线朝上、+Y 指向期望车头方向、在车位尾部半区、框内 */
+    /* 4b. 车头方向箭头：1 片、法线朝上、+Y 指向期望车头方向、画在 P 字上方的
+     * 车头半区（从 P 往车头方向看去即箭头）、框内；贴图画布高随贴片长宽比走
+     * （宽固定 256），箭头不拉伸 */
     if (arrows.length !== 1) out.push(id + ': 车头箭头贴片数=' + arrows.length + '（应为 1）');
     arrows.forEach(function (p) {
       if (!p.normalUp) out.push(id + ': 箭头贴片法线朝下（俯视看到背面会镜像）');
       if (Math.abs(dot(p.up, noseF) - 1) > 1e-6) out.push(id + ': 箭头未指向期望车头方向（偏离演示终态车头角）');
       var alongN = (p.c[0] - s.x) * noseF[0] + (p.c[1] - s.z) * noseF[1];
-      if (alongN >= 0) out.push(id + ': 箭头画在了车头半区（应在车尾应处的尾部半区）');
+      if (alongN <= 0) out.push(id + ': 箭头未画在 P 字上方的车头半区');
       if (!pointInPoly(p.c[0], p.c[1], poly)) out.push(id + ': 箭头贴片中心落在车位框外');
+      if (p.img && p.img.height &&
+          Math.abs(p.img.height / p.img.width - p.hgt / p.sz) > 0.02) {
+        out.push(id + ': 箭头画布长宽比 ' + (p.img.height / p.img.width).toFixed(2) +
+          ' ≠ 贴片 ' + (p.hgt / p.sz).toFixed(2) + '（箭头会拉伸）');
+      }
     });
 
     /* 5. 呼吸脉冲：黄标材质透明度始终在 [0.55, 1] 且确有起伏（跑 3+ 个周期采样）

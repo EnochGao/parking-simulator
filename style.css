@@ -64,6 +64,9 @@ h2 { margin-bottom: 16px; }
 .lc-lock { font-size: 11px; color: #98a0b0; margin-top: 6px; }
 
 .brief-desc { color: #b8bfcc; margin-bottom: 14px; line-height: 1.8; }
+/* 车头朝向提示：琥珀色呼应车位地面黄标（角标/P/箭头），开跑前一眼看到要求 */
+.brief-goal { color: #ffc93f; font-size: 14px; background: rgba(255,201,63,.09);
+  border: 1px solid rgba(255,201,63,.35); border-radius: 8px; padding: 8px 14px; margin-bottom: 14px; }
 .brief-tips { text-align: left; display: inline-block; color: #ffe9a8; line-height: 2; margin-bottom: 12px; list-style: none; }
 .brief-tips li::before { content: "◆ "; color: #6fd66f; }
 .brief-meta { font-size: 12.5px; color: #79808e; margin-bottom: 16px; }

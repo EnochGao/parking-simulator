@@ -26,7 +26,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     group.add(ground);
     disposables.push(ground.geometry, groundMat);
 
-    /* --- 目标车位标线（白边框 + 黄色四角 + 地面 P 标 + 车头方向箭头） ---
+    /* --- 目标车位标线（白边框 + 黄色四角 + 地面 P 标 + P 上方车头方向箭头） ---
      * 平面旋转经数值验证（绕 X 轴 −90° 后 rotation.z 的地面朝向是镜像映射）：
      *   长边沿泊车方向 forward=(sinA,cosA) → rotation.z = A−π/2
      *   横边沿车位宽度 right=(cosA,−sinA) → rotation.z = A
@@ -67,29 +67,34 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         strip(cx - fx * ARM / 2 * sg[1], cz - fz * ARM / 2 * sg[1], ARM, 0.1, a - Math.PI / 2, markM, Y_MARK);
         strip(cx - rx * ARM / 2 * sg[0], cz - rz * ARM / 2 * sg[0], ARM, 0.1, a, markM, Y_MARK);
       });
-      /* 地面车头方向箭头：画在车位尾部（车尾应处的那半），箭头指向期望车头方向
-       * （倒车入库关卡＝指向库口，前进入位关卡＝指向库里）。与 P 字/角标同套
-       * 琥珀色并同步呼吸——完成门禁拦错向后，箭头告诉玩家车头该在哪端 */
+      /* 地面车头方向箭头：画在 P 字上方的车头半区（从 P 往期望车头方向看去即箭头），
+       * 箭头指向期望车头方向（倒车入库关卡＝指向库口，前进入位关卡＝指向库里），
+       * 与 P 字/角标同套琥珀色并同步呼吸——完成门禁拦错向后，箭头告诉玩家车头
+       * 该在哪端。贴片沿库轴向车头退让避让居中 P 字，内缘离 P 字贴片 0.12m */
       var arrowM = null;
       (function () {
         var PLAT = (typeof window !== 'undefined' && window.PS && window.PS.Platform) ||
                    (typeof self !== 'undefined' && self.PS && self.PS.Platform);
         var c = PLAT ? PLAT.createCanvas() : document.createElement('canvas');
-        c.width = 256; c.height = 512;
+        var awid = Math.min(s.w * 0.5, 1.2), alen = Math.min(s.l * 0.26, 1.4);
+        /* 画布高随贴片长宽比走（宽固定 256）：贴图像素两轴等比，箭头不拉伸 */
+        c.width = 256;
+        c.height = Math.round(256 * alen / awid);
         var x = c.getContext('2d');
         x.fillStyle = '#ffffff';
+        var hH = c.height;
         x.beginPath();                                   // 箭头头部（腰形三角）
-        x.moveTo(128, 36); x.lineTo(226, 208); x.lineTo(30, 208); x.closePath(); x.fill();
-        x.fillRect(96, 196, 64, 280);                    // 箭杆
+        x.moveTo(128, hH * 0.03); x.lineTo(224, hH * 0.42); x.lineTo(32, hH * 0.42);
+        x.closePath(); x.fill();
+        x.fillRect(99, hH * 0.415, 58, hH * 0.555);     // 箭杆（直落到贴片尾）
         var at = new THREE.CanvasTexture(c);
         at.anisotropy = 4;
         arrowM = new THREE.MeshBasicMaterial({ map: at, color: AMBER, transparent: true, opacity: 1 });
-        var alen = Math.min(s.l * 0.3, 1.5), awid = Math.min(s.w * 0.5, 1.0);
         var am = new THREE.Mesh(new THREE.PlaneGeometry(awid, alen), arrowM);
         am.rotation.x = -Math.PI / 2;
-        am.rotation.z = na + Math.PI;   // 贴图字头(+Y)→nose（与 P 字同一验证映射）
-        var back = s.l / 2 - alen / 2 - 0.28;   // 箭头中心向车位尾部退让（避让居中 P 字）
-        am.position.set(s.x - nfx * back, Y_ARROW, s.z - nfz * back);
+        am.rotation.z = na + Math.PI;   // 贴图字头(+Y)→nose（与 P 字同一验证映射），箭杆正对车头方向
+        var ahead = alen / 2 + Math.min(s.w * 0.7, s.l * 0.42) / 2 + 0.12;   // 中心→P 字贴片缘留 0.12m
+        am.position.set(s.x + nfx * ahead, Y_ARROW, s.z + nfz * ahead);
         group.add(am);
         disposables.push(am.geometry, arrowM, at);
       })();
@@ -202,6 +207,19 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         disposables.push(bm2.geometry, bm2.material);
       }
     });
+
+    /* --- 关卡边界墙：bounds 四周的碰撞墙以前只拦不画=空气墙，玩家撞得莫名其妙；
+     * 这里按 levels.js getBoundWalls 的同一份规格画出实体砖墙（与碰撞 OBB 对齐） --- */
+    if (PS.Levels && PS.Levels.getBoundWalls) {
+      PS.Levels.getBoundWalls(level).forEach(function (w) {
+        var bwm = new THREE.Mesh(new THREE.BoxGeometry(w.wid, w.h, w.len), brickM);
+        bwm.position.set(w.x, w.h / 2, w.z);
+        bwm.rotation.y = w.a * D2R;
+        bwm.castShadow = true; bwm.receiveShadow = true;
+        group.add(bwm);
+        disposables.push(bwm.geometry);
+      });
+    }
 
     /* --- 地库模式：天花板 + 灯带（roof 组：俯视上帝视角时整体隐藏，避免遮挡俯视相机） --- */
     var roof = null;

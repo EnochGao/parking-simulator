@@ -293,6 +293,10 @@
     }
     var noseDeg = this._guideNose[lv.id] != null ? this._guideNose[lv.id] : lv.spot.a;
     this.worldH = PS.World.createWorld(this.scene, lv, tex, { noseDeg: noseDeg });
+    /* 车头朝向文案：与地面箭头同一来源（演示终态车头角），相对车位轴算朝里/朝外
+     * （车位封闭端=+forward 为"里"，开口=过道为"外"）；传给 HUD 任务栏与简报 */
+    var noseOff = ((noseDeg - lv.spot.a) % 360 + 540) % 360 - 180;
+    var noseTxt = Math.abs(noseOff) < 90 ? '车头朝里' : '车头朝外';
     // 地库关压暗天空/雾色：舱内透过车窗不再看到蓝天砖楼，符合地下环境。
     // 复用既有 Color/Fog 实例原地改值（高频换关路径不再每次新建，语义不变）
     if (lv.garage) {
@@ -335,11 +339,11 @@
     this.usingTop = false; this.assist.top = false;
     this._topYaw = 0; this._topChase = false; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
     this._tips = lv.tips || [];              // 无 tips 关不再每帧兜底新建空数组
-    this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions });
+    this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions, nose: noseTxt });
     this.state = 'briefing';
 
     this.hud.showBriefing(lv, function () { self.startPlay(); }, function () { self.toSelect(); },
-      { maxColl: this.cfg.SCORE.maxCollisions });
+      { maxColl: this.cfg.SCORE.maxCollisions, nose: noseTxt });
   };
 
   Game.prototype.startPlay = function () {

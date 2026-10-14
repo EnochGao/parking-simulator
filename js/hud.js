@@ -64,7 +64,7 @@
       hud.classList.remove('hidden');
       lastVals = {};                       // 换关重置差量缓存，强制整帧重写
       node('hud-level-name').textContent = level.name;
-      node('hud-task-text').textContent = '目标：倒入白色标线车位';
+      node('hud-task-text').textContent = '目标：倒入白色标线车位' + (opts && opts.nose ? ' · ' + opts.nose : '');
       node('hud-coll').textContent = '0';
       node('hud-collmax').textContent = '/' + maxColl;
       node('hud-hint').textContent = level.tips ? level.tips[0] : '';
@@ -172,11 +172,18 @@
       api.showScreen(box);
     };
 
-    /* 任务简报 */
-    api.showBriefing = function (level, onStart, onBack) {
+    /* 任务简报。opts.nose: 车头朝向文案（game.js 算好传入，与地面箭头同源），
+     * 有 entry 门禁的关顺带说明入位要求——玩家开跑前就知道车头该停哪端 */
+    api.showBriefing = function (level, onStart, onBack, opts) {
       var box = el('div', 'menu-box');
       box.appendChild(el('h2', '', level.name));
       box.appendChild(el('p', 'brief-desc', level.desc));
+      if (opts && opts.nose) {
+        var req = level.entry === 'rev' ? '倒车入库 · 车尾先入位'
+          : level.entry === 'fwd' ? '前进入位 · 车头先入'
+          : '入位方向不限 · 以地面箭头为准';
+        box.appendChild(el('p', 'brief-goal', '车头方向：' + opts.nose + ' · ' + req));
+      }
       var tips = el('ul', 'brief-tips');
       (level.tips || []).forEach(function (t) { tips.appendChild(el('li', '', t)); });
       box.appendChild(tips);

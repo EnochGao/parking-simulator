@@ -335,6 +335,12 @@
       s.model.descLines.forEach(function (ln, i) {
         ctx.fillText(ln, m.x + m.w / 2, m.y + 68 + i * 25);
       });
+      if (s.model.goalLines) {                 // 车头朝向行：琥珀色呼应地面黄标
+        f(ctx, 13, 'bold'); ctx.fillStyle = '#ffc93f';
+        s.model.goalLines.forEach(function (ln, j) {
+          ctx.fillText(ln, m.x + m.w / 2, m.y + s.model.goalY + j * 22);
+        });
+      }
       ctx.textAlign = 'left';
       s.model.tipBlocks.forEach(function (tb) {
         ctx.fillStyle = C.green; ctx.fillText('◆', m.x + 64, m.y + tb.y + 16);
@@ -487,11 +493,21 @@
   function showBriefing(lv, onStart, onBack, opts) {
     var W = cur.W, H = cur.H;
     var pw = Math.min(560, W - 32);
-    /* 内容实算排布：标题→描述→要点列表→meta→按钮（矮面板下不再重叠，超出滚动） */
+    /* 内容实算排布：标题→描述→车头朝向→要点列表→meta→按钮（矮面板下不再重叠，超出滚动） */
     var ctx = cur.ctx;
     f(ctx, 14);
     var descLines = wrap(ctx, lv.desc || '', pw - 88);
     var y = 66 + descLines.length * 25 + 10;
+    /* 车头朝向行（与 DOM 端 brief-goal 同文案：琥珀行，开跑前知道车头该停哪端） */
+    var goalLines = null, goalY = 0;
+    if (opts && opts.nose) {
+      var req = lv.entry === 'rev' ? '倒车入库 · 车尾先入位'
+        : lv.entry === 'fwd' ? '前进入位 · 车头先入'
+        : '入位方向不限 · 以地面箭头为准';
+      goalLines = wrap(ctx, '车头方向：' + opts.nose + ' · ' + req, pw - 88);
+      goalY = y;
+      y += goalLines.length * 22 + 12;
+    }
     var tipBlocks = [];
     (lv.tips || []).forEach(function (t) {
       var lines = wrap(ctx, t, pw - 140);
@@ -506,6 +522,8 @@
     var m = s.model;
     s.model.lv = lv;
     s.model.descLines = descLines;
+    s.model.goalLines = goalLines;
+    s.model.goalY = goalY;
     s.model.tipBlocks = tipBlocks;
     s.model.metaY = metaY;
     btn(s, '开始', (m.w - 300) / 2, goY, 300, 48, onStart, true);
@@ -948,7 +966,7 @@
       showHud: function (level, opts) {
         h.visible = true;
         h.levelName = level.name;
-        h.task = '目标：倒入白色标线车位';
+        h.task = '目标：倒入白色标线车位' + (opts && opts.nose ? ' · ' + opts.nose : '');
         h.coll = 0;
         h.collMax = (opts && opts.maxColl) || 5;
         h.hint = level.tips ? level.tips[0] : '';

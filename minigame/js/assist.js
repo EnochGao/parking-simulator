@@ -203,7 +203,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
    * 仅俯视开启时 setVisible(true)；镜面 RT 俯视期间本就不渲染，无穿帮面。
    * update(pose, carCfg, steer, reverse, radar) 每帧调用。 */
   function createTopGuide(scene, car, cfg) {
-    var N = 16, LEN = 2.5;   // 弧只作"往哪走"的意图提示，过长会一直戳到目标区里添乱
+    var N = 16, LEN = 1.6;   // 弧只作"往哪走"的意图提示，过长会一直戳到目标区里添乱
     var COL = 0xcf9bff;      // 安全态紫色；与静态引导线（青蓝/橙）同屏不混淆
     var RAD = (typeof PS !== 'undefined' && PS.RADAR) || { range: 2.5, urgent: 0.7 };
 

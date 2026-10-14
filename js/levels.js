@@ -47,6 +47,20 @@
     });
   });
 
+  /** 关卡边界墙规格（bounds 四周，碰撞与渲染共用一份）：world.js 画实体砖墙、
+   *  getObstacleObbs 出碰撞 OBB——以前只拦不画=空气墙，玩家撞得莫名其妙 */
+  function getBoundWalls(level) {
+    var b = level.bounds;
+    var cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    var ew = b.maxX - b.minX + 1.2, ns = b.maxZ - b.minZ + 1.2;
+    return [
+      { x: cx, z: b.minZ - 0.2, a: 90, len: ew, wid: 0.4, h: 2.2 },
+      { x: cx, z: b.maxZ + 0.2, a: 90, len: ew, wid: 0.4, h: 2.2 },
+      { x: b.minX - 0.2, z: cz, a: 0, len: ns, wid: 0.4, h: 2.2 },
+      { x: b.maxX + 0.2, z: cz, a: 0, len: ns, wid: 0.4, h: 2.2 }
+    ];
+  }
+
   /** 关卡碰撞体列表（含边界墙），渲染与物理共用 */
   function getObstacleObbs(level) {
     var out = [];
@@ -58,15 +72,9 @@
         out.push({ t: o.t, x: o.x, z: o.z, angle: (o.a || 0) * D2R, hw: d.w / 2, hl: d.l / 2, h: d.h });
       }
     });
-    var b = level.bounds;
-    var push = function (x, z, a, len) {
-      out.push({ t: 'wall', bound: true, x: x, z: z, angle: a * D2R, hw: 0.2, hl: len / 2, h: 2.2 });
-    };
-    var cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
-    push(cx, b.minZ - 0.2, 90, b.maxX - b.minX + 1.2);
-    push(cx, b.maxZ + 0.2, 90, b.maxX - b.minX + 1.2);
-    push(b.minX - 0.2, cz, 0, b.maxZ - b.minZ + 1.2);
-    push(b.maxX + 0.2, cz, 0, b.maxZ - b.minZ + 1.2);
+    getBoundWalls(level).forEach(function (w) {
+      out.push({ t: 'wall', bound: true, x: w.x, z: w.z, angle: w.a * D2R, hw: w.wid / 2, hl: w.len / 2, h: w.h });
+    });
     return out;
   }
 
@@ -80,5 +88,5 @@
     return (DEMO && DEMO[level.id]) || null;
   }
 
-  return { LEVELS: LEVELS, CHAPTERS: CHAPTERS, getObstacleObbs: getObstacleObbs, byId: byId, DIMS: DIMS, getPhases: getPhases };
+  return { LEVELS: LEVELS, CHAPTERS: CHAPTERS, getObstacleObbs: getObstacleObbs, getBoundWalls: getBoundWalls, byId: byId, DIMS: DIMS, getPhases: getPhases };
 });
