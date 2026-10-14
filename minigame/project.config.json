@@ -3,7 +3,7 @@
   "compileType": "game",
   "appid": "wxf4579c94027e07d7",
   "projectname": "parking-simulator",
-  "libVersion": "latest",
+  "libVersion": "3.17.2",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -25,7 +25,9 @@
       "ignore": [],
       "disablePlugins": [],
       "outputPath": ""
-    }
+    },
+    "swc": false,
+    "disableSWC": true
   },
   "simulatorPluginLibVersion": {},
   "packOptions": {

@@ -352,11 +352,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
   /** 触屏画质档：pixelRatio/阴影贴图直设渲染器，镜面/倒影 RT 尺寸写回 config.QUALITY
    *  （cockpit 建镜组时读取）——手机 GPU 的核心预算点是"车一动 = 主渲染+3镜+倒影 5 遍场景"，
-   *  RT 降档 + 像素比钳制 + 阴影贴图减半后按需渲染框架即可稳定帧率 */
+   *  镜面/倒影 RT 与桌面档同尺寸，像素比钳 2 + 阴影贴图减半，配合按需渲染稳帧率（吃紧先降 pixelRatioMax） */
   Game.prototype.applyTouchQuality = function () {
     var q = this.cfg.QUALITY && this.cfg.QUALITY.touch;
     if (!q) return;
-    if (q.pixelRatioMax) this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatioMax));
+    /* 像素比取 Platform（网页 window.devicePixelRatio / 小游戏 wx.getWindowInfo().pixelRatio）——
+     * 小游戏环境 window=GameGlobal 上没有 devicePixelRatio，直读会把像素比兜底成 1，真机整屏发糊 */
+    if (q.pixelRatioMax) this.renderer.setPixelRatio(Math.min(this.PS.Platform.pixelRatio() || 1, q.pixelRatioMax));
     if (q.shadowSize) this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
     if (q.mirrorRtW) this.cfg.QUALITY.mirrorRtW = q.mirrorRtW;
     if (q.revRtW) this.cfg.QUALITY.revRtW = q.revRtW;

@@ -65,12 +65,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       mirrorRtW: 384,       // 外后视镜渲染目标宽 px（高按镜片宽高比推）
       revRtW: 320, revRtH: 180,   // 倒车影像渲染目标
       /* 触屏档（手机/平板 GPU 预算）：game.js 检测触屏后在首帧前套用——
-       * pixelRatio 与阴影贴图直接设到渲染器，RT 尺寸写回本节单值（cockpit 读 PS.QUALITY） */
+       * pixelRatio 与阴影贴图直接设到渲染器，RT 尺寸写回本节单值（cockpit 读 PS.QUALITY）。
+       * 镜面/倒影 RT 与桌面档同尺寸（真机像素比 bug 修复后整体偏糊的跟进修），帧率吃紧先降 pixelRatioMax */
       touch: {
-        pixelRatioMax: 1.25,
+        pixelRatioMax: 2,
         shadowSize: 1024,
-        mirrorRtW: 256,
-        revRtW: 240, revRtH: 135
+        mirrorRtW: 384,
+        revRtW: 320, revRtH: 180
       }
     },
     GAMEPAD: {
