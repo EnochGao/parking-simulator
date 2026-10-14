@@ -617,25 +617,25 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
           var ci = { m1: 0, m2: 1, m3: 2 }[b.id];
           b.w = 104; b.h = 42;
           b.x = W / 2 - 168 + ci * 116;
-          b.y = 88 + ins.top;
+          b.y = 96 + ins.top;   // 面板顶 64~96 为标题带（原 chips 与标题中心同在 88，标题下半截被 chips 盖住）
           break;
         }
         case 'mup': case 'mlf': case 'mrg': case 'mdn': {
           b.w = b.h = 54;
           var pi = { mup: 0, mlf: 1, mrg: 2, mdn: 3 }[b.id];
           b.x = W / 2 + [-27, -81, 27, -27][pi];
-          b.y = 140 + ins.top + [0, 52, 52, 104][pi];
+          b.y = 150 + ins.top + [0, 52, 52, 104][pi];
           break;
         }
         case 'mdone':
-          b.w = 150; b.h = 44;
-          b.x = W / 2 - 75;
-          b.y = Math.max(312 + ins.top, H - 24 - ins.bottom - 44);
+          b.w = 112; b.h = 40;
+          b.x = W / 2 - 56;
+          b.y = Math.max(316 + ins.top, H - 24 - ins.bottom - b.h);
           doneY = b.y;
           break;
       }
     });
-    cur.tc.mirrorBounds = { x: W / 2 - 182, y: 64 + ins.top, w: 364, h: (doneY || 356) + 56 - (64 + ins.top) };
+    cur.tc.mirrorBounds = { x: W / 2 - 182, y: 64 + ins.top, w: 364, h: (doneY || 356) + 52 - (64 + ins.top) };
     cur.dirty = true;
   }
 
@@ -648,8 +648,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       ctx.fillStyle = 'rgba(16,18,24,.86)';
       rr(ctx, mb.x, mb.y, mb.w, mb.h, 18); ctx.fill();
       ctx.strokeStyle = C.border; ctx.lineWidth = 1; rr(ctx, mb.x, mb.y, mb.w, mb.h, 18); ctx.stroke();
-      f(ctx, 17, 'bold'); ctx.fillStyle = C.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('后视镜调节', cur.W / 2, mb.y + 24);
+      f(ctx, 16, 'bold'); ctx.fillStyle = C.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('后视镜调节', cur.W / 2, mb.y + 18);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
     for (var i = 0; i < bs.length; i++) {
@@ -657,13 +657,14 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       if (!tcBtnVisible(b)) continue;
       if (b.id === 'wheel') { drawWheel(ctx, b); continue; }
       if (b.grp === 'mirror' && b.id !== 'mdone') b.on = b.cb ? (cur.game.mirrorSel === ({ m1: 0, m2: 1, m3: 2 })[b.id]) : b.on;
-      var rect = b.grp === 'mirror' && b.id !== 'mdone';   // chips 为圆角矩形，其余圆形
+      var done = b.id === 'mdone';
+      var rect = b.grp === 'mirror';   // 调镜组全部圆角矩形：chips + 完成钮（完成钮此前落圆形分支，被画成 φ=w 的正圆）
       if (rect) {
-        ctx.fillStyle = b.on ? 'rgba(111,214,111,.4)' : '#2c313c';
+        ctx.fillStyle = done ? 'rgba(111,214,111,.30)' : (b.on ? 'rgba(111,214,111,.4)' : '#2c313c');
         rr(ctx, b.x, b.y, b.w, b.h, 10); ctx.fill();
-        ctx.strokeStyle = b.on ? C.green : '#454b58';
+        ctx.strokeStyle = (done || b.on) ? C.green : '#454b58';
         ctx.lineWidth = 1; rr(ctx, b.x, b.y, b.w, b.h, 10); ctx.stroke();
-        ctx.fillStyle = b.on ? '#c9f2cf' : C.text;
+        ctx.fillStyle = (done || b.on) ? '#c9f2cf' : C.text;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         f(ctx, 14, 'bold');
         ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
@@ -1007,7 +1008,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     function padArrow(id, label, key) {
       tc.buttons.push({ id: id, label: label, cap: '', grp: 'mirror', key: key, pad: true, held: false, on: false, x: 0, y: 0, w: 54, h: 54 });
     }
-    tc.buttons.push({ id: 'mdone', label: '完成', grp: 'mirror', cb: function () { game.mirrorMode = false; releaseAll(); }, x: 0, y: 0, w: 150, h: 44 });
+    tc.buttons.push({ id: 'mdone', label: '完成', grp: 'mirror', cb: function () { game.mirrorMode = false; releaseAll(); }, x: 0, y: 0, w: 112, h: 40 });
     mirrorChip('m1', '左外镜', 0);
     mirrorChip('m2', '右外镜', 1);
     mirrorChip('m3', '车内镜', 2);
