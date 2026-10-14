@@ -9,7 +9,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
   else { root.PS = root.PS || {}; root.PS.World = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
 
-  function createWorld(scene, level, textures) {
+  function createWorld(scene, level, textures, opts) {
     var D2R = Math.PI / 180;
     var group = new THREE.Group();
     scene.add(group);
@@ -26,15 +26,21 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     group.add(ground);
     disposables.push(ground.geometry, groundMat);
 
-    /* --- 目标车位标线（白边框 + 黄色四角 + 地面 P 标，帮助玩家一眼找到目标位） ---
+    /* --- 目标车位标线（白边框 + 黄色四角 + 地面 P 标 + 车头方向箭头） ---
      * 平面旋转经数值验证（绕 X 轴 −90° 后 rotation.z 的地面朝向是镜像映射）：
      *   长边沿泊车方向 forward=(sinA,cosA) → rotation.z = A−π/2
      *   横边沿车位宽度 right=(cosA,−sinA) → rotation.z = A
-     *   P 字在入口方向正读（字头朝库里）→ rotation.z = A+π（平面法线朝上，无镜像）
+     *   贴图字头(+Y)指向 forward → rotation.z = A+π（平面法线朝上，无镜像）
      * 旧实现三条线统一 z=−A（宽度方向），侧边长线被画横、部分角度下穿库 —— 已修 */
     var spotTick = null;
     (function () {
       var s = level.spot, a = s.a * D2R;
+      /* 期望车头方向（教学停法）：game.js 传入该关演示路径（标准答案）的终态
+       * 车头角——spot.a 只有库轴意义，正负号在部分关卡与教学停法相反（评分
+       * 角度对称所致）；未传（静态工具/旧调用方）时回退库轴 a */
+      var noseDeg = (opts && opts.noseDeg != null) ? opts.noseDeg : s.a;
+      var na = noseDeg * D2R;
+      var nfx = Math.sin(na), nfz = Math.cos(na);
       var fx = Math.sin(a), fz = Math.cos(a), rx = Math.cos(a), rz = -Math.sin(a);
       var hw = s.w / 2, hl = s.l / 2;
       var AMBER = 0xffc93f;   // 与 assist.js 雷达预警同色系：绿色=轨迹引导，黄色=目标位
@@ -48,7 +54,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         group.add(m);
         disposables.push(m.geometry);
       }
-      var Y_LINE = 0.03, Y_MARK = 0.032, Y_P = 0.034;  // 逐层抬高 2mm 防贴片互揍 z-fight
+      var Y_LINE = 0.03, Y_MARK = 0.032, Y_P = 0.034, Y_ARROW = 0.036;  // 逐层抬高 2mm 防贴片互揍 z-fight
       /* 白色边框（线宽 12cm，现实划线风格；入口侧开口） */
       strip(s.x + rx * hw, s.z + rz * hw, s.l, 0.12, a - Math.PI / 2, lineM, Y_LINE);
       strip(s.x - rx * hw, s.z - rz * hw, s.l, 0.12, a - Math.PI / 2, lineM, Y_LINE);
@@ -61,6 +67,32 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         strip(cx - fx * ARM / 2 * sg[1], cz - fz * ARM / 2 * sg[1], ARM, 0.1, a - Math.PI / 2, markM, Y_MARK);
         strip(cx - rx * ARM / 2 * sg[0], cz - rz * ARM / 2 * sg[0], ARM, 0.1, a, markM, Y_MARK);
       });
+      /* 地面车头方向箭头：画在车位尾部（车尾应处的那半），箭头指向期望车头方向
+       * （倒车入库关卡＝指向库口，前进入位关卡＝指向库里）。与 P 字/角标同套
+       * 琥珀色并同步呼吸——完成门禁拦错向后，箭头告诉玩家车头该在哪端 */
+      var arrowM = null;
+      (function () {
+        var PLAT = (typeof window !== 'undefined' && window.PS && window.PS.Platform) ||
+                   (typeof self !== 'undefined' && self.PS && self.PS.Platform);
+        var c = PLAT ? PLAT.createCanvas() : document.createElement('canvas');
+        c.width = 256; c.height = 512;
+        var x = c.getContext('2d');
+        x.fillStyle = '#ffffff';
+        x.beginPath();                                   // 箭头头部（腰形三角）
+        x.moveTo(128, 36); x.lineTo(226, 208); x.lineTo(30, 208); x.closePath(); x.fill();
+        x.fillRect(96, 196, 64, 280);                    // 箭杆
+        var at = new THREE.CanvasTexture(c);
+        at.anisotropy = 4;
+        arrowM = new THREE.MeshBasicMaterial({ map: at, color: AMBER, transparent: true, opacity: 1 });
+        var alen = Math.min(s.l * 0.3, 1.5), awid = Math.min(s.w * 0.5, 1.0);
+        var am = new THREE.Mesh(new THREE.PlaneGeometry(awid, alen), arrowM);
+        am.rotation.x = -Math.PI / 2;
+        am.rotation.z = na + Math.PI;   // 贴图字头(+Y)→nose（与 P 字同一验证映射）
+        var back = s.l / 2 - alen / 2 - 0.28;   // 箭头中心向车位尾部退让（避让居中 P 字）
+        am.position.set(s.x - nfx * back, Y_ARROW, s.z - nfz * back);
+        group.add(am);
+        disposables.push(am.geometry, arrowM, at);
+      })();
       /* 地面 P 字：路径手绘（不依赖平台字体），白色笔划 + 材质染黄，随角标同步呼吸 */
       (function () {
         var PLAT = (typeof window !== 'undefined' && window.PS && window.PS.Platform) ||
@@ -93,7 +125,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         spotTick = function (dt) {
           t += dt;
           var o = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 3.6));
-          markM.opacity = o; pM.opacity = o;
+          markM.opacity = o; pM.opacity = o; arrowM.opacity = o;
         };
       })();
       disposables.push(lineM, markM);

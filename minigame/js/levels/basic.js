@@ -3,7 +3,9 @@ var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全�
 var module, exports, define;                  /* 声明以捕获外层泄露 */
 module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
 /* 第一章·基础篇：认识操作与基础入库（lv01-04）。构造器见 js/level_kit.js。
- * 浏览器按 index.html 脚本序注册进 PS.CHAPTERS，Node 由 levels.js 显式 require。 */
+ * 浏览器按 index.html 脚本序注册进 PS.CHAPTERS，Node 由 levels.js 显式 require。
+ * entry: 入位方向教学要求（'rev'=必须车尾先入位倒车入库，'fwd'=必须车头先入位），
+ * sim 完成判定据此放行——不标（如平移挪库）则不限入位方向。 */
 (function (root, factory) {
   var api = factory(root);
   if (typeof module === 'object' && module.exports) { module.exports = api; }
@@ -16,7 +18,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     title: '第一章·基础篇', levels: [
       /* ---------------- 1 教学关 ---------------- */
       {
-        id: 'lv01', name: '教学·空旷车位', diff: 1, par: 60,
+        id: 'lv01', name: '教学·空旷车位', diff: 1, par: 60, entry: 'rev',
         desc: '熟悉驾驶舱视角与操作，把车倒入右侧标准车位。',
         tips: ['W/↑ 前进 · S/↓ 倒车 · 松开即刹车', 'A D 打方向；档位自动切换（前进 D / 倒车 R）', '倒车时看右后视镜，库角出现回方向', 'M 键俯视图帮你理解车位关系'],
         player: { x: 0, z: -13, a: 0 },
@@ -31,7 +33,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       },
       /* ---------------- 2 倒车入库·标准 ---------------- */
       {
-        id: 'lv02', name: '倒车入库·两侧有车', diff: 2, par: 55,
+        id: 'lv02', name: '倒车入库·两侧有车', diff: 2, par: 55, entry: 'rev',
         desc: '标准垂直车位，两侧都有车，一把倒入不剐蹭。',
         tips: ['借道要充分：车尾过了旁边车再打方向', '看右镜：库角快消失时开始回方向', '车身正了立即停车，别撞到后车'],
         player: { x: 0, z: -12, a: 0 },
@@ -44,6 +46,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       /* ---------------- 3 侧方停车 ---------------- */
       {
         id: 'lv03', name: '侧方停车·路边趴车', diff: 2, par: 70,
+        // 侧方位不设 entry 门禁：进出本就双向揉库（倒车甩尾+前拉居中），
+        // 运动方向语义模糊，硬拦会误伤正常倒车侧方；垂直/斜列库才区分倒库/头插
         desc: '路边平行车位，前后都有车，右靠路沿。',
         tips: ['与前车平行再倒，间距约 1 米', '倒至后轮与前车尾对齐，向右打满', '左后角接近路沿时快速回正摆正'],
         player: { x: -10, z: -2.3, a: 90 },
@@ -56,7 +60,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       },
       /* ---------------- 4 斜列式车位 ---------------- */
       {
-        id: 'lv04', name: '斜列式车位·45°', diff: 1, par: 50,
+        id: 'lv04', name: '斜列式车位·45°', diff: 1, par: 50, entry: 'fwd',
         desc: '斜列车位一排，顺着斜线车头驶入。',
         tips: ['顺着车位斜线走，不要提前回方向', '车头进库后慢行，别蹭到隔离车辆'],
         player: { x: -10, z: -9.2, a: 0 },

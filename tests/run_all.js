@@ -255,6 +255,13 @@ LVL.LEVELS.forEach(function (lv) {
   check('关卡数据: 无共面zfight/车辆穿模', f.length === 0, f.join(' | '));
 })();
 
+/* 车位标线几何门禁（tests/spot_mark_check.js）：白边线/黄角标/P 字/车头方向箭头
+ * 逐关贴合（箭头朝向=演示路径终态车头角，与完成门禁同源） */
+(function () {
+  var f = require(path.join(__dirname, 'spot_mark_check.js')).check();
+  check('关卡数据: 车位标线/车头箭头贴合', f.length === 0, f.join(' | '));
+})();
+
 /* ---------------- 5. 自动驾驶回归（全关卡可通关性） ---------------- */
 section('自动驾驶回归');
 LVL.LEVELS.forEach(function (lv) {
@@ -266,6 +273,35 @@ LVL.LEVELS.forEach(function (lv) {
   else info += ' ' + (r.reason || '失败');
   check(lv.id + ' ' + lv.name, ok, info);
 });
+
+/* ---------------- 5b. 入位方向门禁（教学防钻空子） ---------------- */
+section('入位方向门禁');
+(function () {
+  // 标注 entry 的关卡：演示路径必须按教学方向入位（否则 runLevel 完成判定不过）
+  LVL.LEVELS.forEach(function (lv) {
+    if (!lv.entry) return;
+    var r = AUTO.runLevel(lv, {});
+    check(lv.id + ' 演示按' + (lv.entry === 'rev' ? '倒车(车尾先入)' : '前进(车头先入)') + '入位',
+      r.success, 'ok=' + r.success + ' ' + (r.reason || ''));
+  });
+
+  // 钻空子路径被拦：lv02 库口正西方直行车头插进位（几何/角度均满分）不得判完成
+  var lv = LVL.byId('lv02');
+  var mkCarAt = function (x, z, hDeg) {
+    return new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: x, z: z, heading: hDeg * Math.PI / 180 });
+  };
+  var carP = mkCarAt(lv.spot.x - 4.5, lv.spot.z, 90);   // 库口正西方，车头朝库直行
+  var run = SIM.createRun(lv, { car: carP });
+  var res = null, completed = false;
+  for (var i = 0; i < 900; i++) {   // 直行进位 + 停稳 3s（远超 stopTime）
+    res = run.step(1 / 60, carP.x < lv.spot.x - 1.2 ? { drive: 1, steer: 0 } : {});   // 提前收油，防冲出库尾
+    if (res.completed) { completed = true; break; }
+  }
+  check('门禁: lv02 车头直插不判完成', !completed, 'entryDir=' + run.entryDir);
+  check('门禁: 车头直插 entryDir 判为 fwd', run.entryDir === 'fwd');
+  check('门禁: 车头直插几何上确已入位（拦的是方向而非几何）', res.ev.inside && res.ev.devDeg < CFG.SCORE.completeAngleDeg,
+    'inside=' + res.ev.inside + ' dev=' + res.ev.devDeg.toFixed(1) + '°');
+})();
 
 /* ---------------- 6. 一局模拟（sim）单元测试 ---------------- */
 section('一局模拟');

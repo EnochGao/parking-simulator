@@ -5,21 +5,110 @@
   else { root.PS = root.PS || {}; root.PS.Assist = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
 
-  /** 引导轨迹线：用执行器无头跑出的轨迹画地面曲线 */
+  /** 引导轨迹线：用执行器无头跑出的轨迹画地面曲线。
+   * 揉库/侧方类关卡前后多趟压在同一片区域，单色虚线叠成一团读不出走向——
+   * 按"位移 × 车头朝向"点积的符号拆前进/倒车两色分段（运动学位移恒沿
+   * ±航向，符号即档位）：前进 = 青蓝长虚线，倒车 = 橙色细虚线，虚实节奏
+   * 也不同形成双重编码；再沿每段铺同色贴地三角箭头标行进方向。
+   * 换挡刹车过渡的近零位移点沿用上一分类，短碎段并入邻段，避免换挡点
+   * 炸出碎片线。旧契约不变：返回 { mesh, setVisible, dispose }。 */
   function createGuideLine(scene, pathPoints) {
-    if (!pathPoints || pathPoints.length < 2) return { mesh: null, setVisible: function () {} };
-    var pts = pathPoints.map(function (p) { return new THREE.Vector3(p.x, 0.06, p.z); });
-    var geo = new THREE.BufferGeometry().setFromPoints(pts);
-    var mat = new THREE.LineDashedMaterial({ color: 0x35d06a, dashSize: 0.5, gapSize: 0.35 });
-    var line = new THREE.Line(geo, mat);
-    line.computeLineDistances();
-    scene.add(line);
+    if (!pathPoints || pathPoints.length < 2) return { mesh: null, setVisible: function () {}, dispose: function () {} };
+    var COL = { 1: 0x4db8ff, '-1': 0xffa24b };
+    var DASH = { 1: { dashSize: 0.55, gapSize: 0.38 }, '-1': { dashSize: 0.28, gapSize: 0.26 } };
+    var Y = 0.06, MIN_RUN = 0.3, ARROW_GAP = 1.5, ARROW_FIRST = 0.9, ARROW_TAIL = 0.5;
+
+    var n = pathPoints.length;
+    var dirOf = new Array(n - 1);      // dirOf[i]：点 i→i+1 的行进方向（+1 前进 / -1 倒车）
+    var last = 1;
+    for (var i = 0; i < n - 1; i++) {
+      var dx = pathPoints[i + 1].x - pathPoints[i].x, dz = pathPoints[i + 1].z - pathPoints[i].z;
+      var m2 = dx * dx + dz * dz;
+      if (m2 > 1e-8 && typeof pathPoints[i + 1].h === 'number') {
+        var d = dx * Math.sin(pathPoints[i + 1].h) + dz * Math.cos(pathPoints[i + 1].h);
+        var eps = 0.02 * Math.sqrt(m2);   // 侧滑死区
+        if (d > eps) last = 1; else if (d < -eps) last = -1;
+      }
+      dirOf[i] = last;
+    }
+
+    function runLen(r) {
+      var L = 0;
+      for (var i = r.a; i < r.b; i++) L += Math.hypot(pathPoints[i + 1].x - pathPoints[i].x, pathPoints[i + 1].z - pathPoints[i].z);
+      return L;
+    }
+    /* 聚同向 run（点闭区间 [a,b]），碎 run 并入前段（首段则并给后段） */
+    var runs = [], a = 0;
+    for (var i = 1; i < n - 1; i++) {
+      if (dirOf[i] !== dirOf[a]) { runs.push({ a: a, b: i, dir: dirOf[a] }); a = i; }
+    }
+    runs.push({ a: a, b: n - 1, dir: dirOf[a] });
+    var merged = [];
+    for (var k = 0; k < runs.length; k++) {
+      if (merged.length && runLen(runs[k]) < MIN_RUN) merged[merged.length - 1].b = runs[k].b;
+      else merged.push(runs[k]);
+    }
+    if (merged.length > 1 && runLen(merged[0]) < MIN_RUN) { merged[1].a = merged[0].a; merged.shift(); }
+
+    var group = new THREE.Group();
+    var geos = [], mats = [];
+    merged.forEach(function (r) {
+      var pts = [];
+      for (var i = r.a; i <= r.b; i++) pts.push(new THREE.Vector3(pathPoints[i].x, Y, pathPoints[i].z));
+      var geo = new THREE.BufferGeometry().setFromPoints(pts);
+      var mat = new THREE.LineDashedMaterial({ color: COL[r.dir], dashSize: DASH[r.dir].dashSize, gapSize: DASH[r.dir].gapSize });
+      var line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      group.add(line);
+      geos.push(geo); mats.push(mat);
+    });
+
+    /* 方向箭头：同色扁三角贴地指向该段行进向；短段居中一枚，长段等距铺，
+     * 段尾留白（车要停进去的位置不压箭头）。同色合并成一张 Mesh 省绘制调用 */
+    var arrowVerts = { 1: [], '-1': [] };
+    function place(dir, x, z, ux, uz) {
+      var lx = -uz, lz = ux, y = Y + 0.01;
+      arrowVerts[dir].push(
+        x + ux * 0.30, y, z + uz * 0.30,
+        x - ux * 0.10 + lx * 0.17, y, z - uz * 0.10 + lz * 0.17,
+        x - ux * 0.10 - lx * 0.17, y, z - uz * 0.10 - lz * 0.17
+      );
+    }
+    merged.forEach(function (r) {
+      var total = runLen(r), stops = [];
+      if (total < ARROW_GAP + 0.4) stops.push(total / 2);
+      else for (var p = ARROW_FIRST; p <= total - ARROW_TAIL; p += ARROW_GAP) stops.push(p);
+      var si = 0, seg0 = 0;
+      for (var i = r.a; i < r.b && si < stops.length; i++) {
+        var px = pathPoints[i].x, pz = pathPoints[i].z;
+        var dx = pathPoints[i + 1].x - px, dz = pathPoints[i + 1].z - pz;
+        var len = Math.hypot(dx, dz);
+        if (len < 1e-6) continue;
+        while (si < stops.length && stops[si] <= seg0 + len) {
+          var t = (stops[si] - seg0) / len;
+          place(r.dir, px + dx * t, pz + dz * t, dx / len, dz / len);
+          si++;
+        }
+        seg0 += len;
+      }
+    });
+    [1, -1].forEach(function (dir) {
+      if (!arrowVerts[dir].length) return;
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arrowVerts[dir]), 3));
+      var mat = new THREE.MeshBasicMaterial({ color: COL[dir], transparent: true, opacity: 0.95, side: THREE.DoubleSide });
+      group.add(new THREE.Mesh(geo, mat));
+      geos.push(geo); mats.push(mat);
+    });
+
+    scene.add(group);
     return {
-      mesh: line,
-      setVisible: function (v) { line.visible = v; },
+      mesh: group,
+      setVisible: function (v) { group.visible = v; },
       dispose: function () {
-        scene.remove(line);
-        geo.dispose(); mat.dispose();
+        scene.remove(group);
+        geos.forEach(function (g) { g.dispose(); });
+        mats.forEach(function (m) { m.dispose(); });
       }
     };
   }
@@ -104,18 +193,20 @@
    * - 前轮转角标线：两根琥珀色短杆悬浮在前轮正上方（高出车顶 0.11m，俯视不
    *   被车身遮挡），挂在前轮 pivot 下随轮实时偏转，直接回答"轮朝哪"；
    * - 预测轨迹弧：按当前前轮角以自行车模型（与 physics.js 后轴参考同式）从
-   *   车头/车尾（随档位）积分 LEN 米的预计轨迹，回答"车往哪走"；R 档颜色随
-   *   倒车雷达距离分级（与倒影弧线同一阈值），D 档取绿色。
+   *   车头/车尾（随档位）积分 LEN 米的预计轨迹，回答"车往哪走"；取紫色与
+   *   引导线两色（青蓝/橙）区分——R 档仍随倒车雷达距离分级（与倒影弧线同
+   *   一阈值），近距黄/急停红覆盖紫色。
    * 仅俯视开启时 setVisible(true)；镜面 RT 俯视期间本就不渲染，无穿帮面。
    * update(pose, carCfg, steer, reverse, radar) 每帧调用。 */
   function createTopGuide(scene, car, cfg) {
-    var N = 28, LEN = 5;
+    var N = 16, LEN = 2.5;   // 弧只作"往哪走"的意图提示，过长会一直戳到目标区里添乱
+    var COL = 0xcf9bff;      // 安全态紫色；与静态引导线（青蓝/橙）同屏不混淆
     var RAD = (typeof PS !== 'undefined' && PS.RADAR) || { range: 2.5, urgent: 0.7 };
 
     /* 预测轨迹弧：layer 0 主场景线条，与静态引导线(0.06)/倒影弧线(0.07)错层 */
     var geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
-    var mat = new THREE.LineBasicMaterial({ color: 0x35d06a, transparent: true, opacity: 0.95 });
+    var mat = new THREE.LineBasicMaterial({ color: COL, transparent: true, opacity: 0.95 });
     var line = new THREE.Line(geo, mat);
     line.frustumCulled = false;
     line.visible = false;
@@ -158,8 +249,8 @@
       }
       geo.attributes.position.needsUpdate = true;
       var col = (reverse && radar != null)
-        ? (radar < RAD.urgent ? 0xff4a30 : radar < RAD.range ? 0xffc93f : 0x35d06a)
-        : 0x35d06a;
+        ? (radar < RAD.urgent ? 0xff4a30 : radar < RAD.range ? 0xffc93f : COL)
+        : COL;
       if (mat.color.getHex() !== col) mat.color.setHex(col);
     }
 

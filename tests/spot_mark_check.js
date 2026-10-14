@@ -4,14 +4,16 @@
  *   （中点落在边线上、方向与车位轴平行），任意车位角度（0/12/45/90/270/315°）都成立
  * - 黄角标：8 条 L 臂全部落在车位框内、且贴近四角
  * - P 字贴片：法线朝上（俯视可读不镜像）、贴片 +Y（字头）指向泊车方向 forward
- * - tick：呼吸脉冲材质透明度始终在 [0.55, 1]
+ * - 车头方向箭头：法线朝上、+Y 指向期望车头方向（演示路径终态车头角，与完成
+ *   门禁同源）、画在车位尾部半区（车尾应处的一侧）、整体在车位框内
+ * - tick：呼吸脉冲材质透明度始终在 [0.55, 1]（角标/P/箭头三材质同步）
  * 发现错位即打印并以非零码退出 */
 'use strict';
 var path = require('path');
 var JS = path.join(__dirname, '..', 'js');
 global.THREE = require(path.join(__dirname, '..', 'vendor', 'three.min.js'));
 
-/* world.js 画 P 字走 Platform 画布（Node 无 document）：挂桩画布 + 2d 上下文，
+/* world.js 画 P 字/箭头走 Platform 画布（Node 无 document）：挂桩画布 + 2d 上下文，
  * CanvasTexture 只存引用不触 GL，桩实现足够 */
 global.window = { PS: { Platform: { createCanvas: function () {
   return { width: 0, height: 0, getContext: function () {
@@ -25,6 +27,7 @@ global.PS = {
 };
 var World = require(path.join(JS, 'world.js'));
 var Scoring = require(path.join(JS, 'scoring.js'));
+var AUTO = require(path.join(JS, 'autopilot.js'));
 var D2R = Math.PI / 180;
 
 function pointInPoly(px, pz, poly) {
@@ -43,9 +46,14 @@ function check() {
     var s = lv.spot, a = s.a * D2R;
     var fwd = [Math.sin(a), Math.cos(a)], rgt = [Math.cos(a), -Math.sin(a)];
     var poly = Scoring.spotPoly({ x: s.x, z: s.z, angle: a, w: s.w, l: s.l });
+    /* 期望车头方向：与 game.js 同源——演示路径（标准答案）终态车头角 */
+    var demo = AUTO.runLevel(lv, {});
+    var nose = (demo.success && demo.final ? demo.final.heading * 180 / Math.PI : s.a) * D2R;
+    var noseF = [Math.sin(nose), Math.cos(nose)];
 
     var world = World.createWorld({ add: function () {} }, lv,
-      { asphalt: {}, concrete: {}, brick: {}, windows: {}, grass: {} });
+      { asphalt: {}, concrete: {}, brick: {}, windows: {}, grass: {} },
+      { noseDeg: nose / D2R });
 
     /* 收集车位标线贴片：PlaneGeometry + MeshBasicMaterial，且贴地（y < 0.1） */
     var strips = [], pPlanes = [];
@@ -106,20 +114,33 @@ function check() {
       if (!(alongF(t.dir) || alongR(t.dir))) out.push(id + ': 角标臂方向既非 forward 也非 right');
     });
 
-    /* 4. P 字：1 片、居中、法线朝上、字头(+Y)指向 forward（入口方向正读） */
-    if (pPlanes.length !== 1) out.push(id + ': P 贴片数=' + pPlanes.length + '（应为 1）');
-    pPlanes.forEach(function (p) {
+    /* 4. 带贴图贴片 = P 字（居中）+ 车头箭头（尾部半区） */
+    var pPlane = pPlanes.filter(function (p) { return Math.hypot(p.c[0] - s.x, p.c[1] - s.z) <= 0.02; });
+    var arrows = pPlanes.filter(function (p) { return Math.hypot(p.c[0] - s.x, p.c[1] - s.z) > 0.02; });
+    /* 4a. P 字：1 片、居中、法线朝上、字头(+Y)指向 forward（入口方向正读） */
+    if (pPlane.length !== 1) out.push(id + ': P 贴片数=' + pPlane.length + '（应为 1）');
+    pPlane.forEach(function (p) {
       if (!p.normalUp) out.push(id + ': P 贴片法线朝下（俯视看到背面会镜像）');
       if (Math.abs(dot(p.up, fwd) - 1) > 1e-6) out.push(id + ': P 字头未指向泊车方向（不正读）');
       if (Math.hypot(p.c[0] - s.x, p.c[1] - s.z) > 0.02) out.push(id + ': P 贴片未居中');
     });
+    /* 4b. 车头方向箭头：1 片、法线朝上、+Y 指向期望车头方向、在车位尾部半区、框内 */
+    if (arrows.length !== 1) out.push(id + ': 车头箭头贴片数=' + arrows.length + '（应为 1）');
+    arrows.forEach(function (p) {
+      if (!p.normalUp) out.push(id + ': 箭头贴片法线朝下（俯视看到背面会镜像）');
+      if (Math.abs(dot(p.up, noseF) - 1) > 1e-6) out.push(id + ': 箭头未指向期望车头方向（偏离演示终态车头角）');
+      var alongN = (p.c[0] - s.x) * noseF[0] + (p.c[1] - s.z) * noseF[1];
+      if (alongN >= 0) out.push(id + ': 箭头画在了车头半区（应在车尾应处的尾部半区）');
+      if (!pointInPoly(p.c[0], p.c[1], poly)) out.push(id + ': 箭头贴片中心落在车位框外');
+    });
 
-    /* 5. 呼吸脉冲：黄标材质透明度始终在 [0.55, 1] 且确有起伏（跑 3+ 个周期采样） */
+    /* 5. 呼吸脉冲：黄标材质透明度始终在 [0.55, 1] 且确有起伏（跑 3+ 个周期采样）
+     *    角标/P 字/箭头三套琥珀材质同步呼吸 */
     if (typeof world.tick !== 'function') out.push(id + ': 缺 tick 句柄');
     else {
-      var markMats = [];   // 角标 8 臂共享同一材质实例（脉冲统一驱动），按身份去重
+      var markMats = [];   // 按材质实例去重（角标 8 臂共享同一材质）
       world.group.traverse(function (n) {
-        if (n.material instanceof THREE.MeshBasicMaterial && n.material.transparent && !n.material.map) {
+        if (n.material instanceof THREE.MeshBasicMaterial && n.material.transparent) {
           if (markMats.indexOf(n.material) < 0) markMats.push(n.material);
         }
       });
@@ -130,7 +151,7 @@ function check() {
           oMin = Math.min(oMin, mm.opacity); oMax = Math.max(oMax, mm.opacity);
         });
       }
-      if (markMats.length !== 1) out.push(id + ': 角标黄标材质数=' + markMats.length + '（应为 1，供脉冲统一驱动）');
+      if (markMats.length !== 3) out.push(id + ': 琥珀贴片材质数=' + markMats.length + '（应为 3：角标/P/箭头，供脉冲统一驱动）');
       if (oMin < 0.55 - 1e-6 || oMax > 1 + 1e-6) out.push(id + ': 脉冲透明度越界 [' + oMin.toFixed(2) + ',' + oMax.toFixed(2) + ']');
       if (oMax - oMin < 0.3) out.push(id + ': 脉冲无起伏（Δ=' + (oMax - oMin).toFixed(2) + '）');
     }

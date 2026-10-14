@@ -2,6 +2,9 @@
  * 唯一权威实现：游戏内主循环（game.js）与无头回归/演示执行器（autopilot.js）
  * 共用本模块——此前 game.postStep 与 autopilot.postUpdate 是两份手工同步的拷贝
  * （连碰撞计次语义都不一致），本模块统一之，规则不再漂移。
+ * 完成判定含入位方向门禁：关卡标 entry:'rev'（教倒车入库）时车头直插不算停好，
+ * entry:'fwd'（教前进入位）反之——在"四角全入库"上升沿按净纵向位移判入位
+ * 方向（见 trackEntry），防止绕个大圈插进位也判成功的钻空子玩法。
  * 状态对象 car 只需暴露 {x, z, heading, speed, steer, gear}（CarPhysics 实例或等价视图）；
  * 步进方式由调用方选择：input 驱动（step，要求 car.update(dt, input) 存在），
  * 或外部自推进状态后调 post(dt)（演示重放/联机帧同步走这条）。Node/浏览器双端通用。 */
@@ -56,6 +59,10 @@
       x: level.spot.x, z: level.spot.z,
       angle: level.spot.a * Math.PI / 180, w: level.spot.w, l: level.spot.l
     };
+    /* 入位方向追踪的常量（与 scoring 同基：前向=(s,c)，右侧=(c,-s)） */
+    var sS = Math.sin(spot.angle), sC = Math.cos(spot.angle);
+    var shw = spot.w / 2, shl = spot.l / 2;
+    var hw = CAR.width / 2, hl = CAR.length / 2;
     /* 完成判定的距离粗筛半径：车中心要落在车位多边形内，到车位中心距离必
      * ≤ max(半长,半宽)……取 l/2+w/2 再留 1m 余量；粗筛命中才做全量评分——
      * evaluate 每步分配多块临时数组，赶路阶段纯浪费 */
@@ -66,6 +73,10 @@
       time: 0, collisions: 0,
       obstacles: obstacles, obDefs: obDefs,
       _wasColliding: false, _lastColTime: -9, _stopTimer: 0,
+      /* 入位方向判定（教学门禁，积分制）：entryDir='rev'倒车入位 / 'fwd'前进
+       * 入位 / null 未判定——车与库有交集期间按方向累计纵向里程取多数派；
+       * 出生即完美入库（账本为空）保留 null，由完成门禁按关卡要求放行 */
+      entryDir: null, _fwdIn: 0, _revIn: 0,
       /* 60Hz 热路径复用对象：车辆 OBB（setObb 原地刷新）、远距占位评分、步结果。
        * 调用方（game/autopilot/测试）均同步消费返回值，无人跨步保留——安全 */
       _carO: COL.makeObb(0, 0, 0, CAR.width / 2, CAR.length / 2),
@@ -81,6 +92,35 @@
       });
     }
     run.evaluate = evaluateNow;
+
+    /** 点是否在车位矩形内（spot-local 判定，几何与 scoring.inConvex 等价） */
+    function pairIn(px, pz) {
+      var dx = px - spot.x, dz = pz - spot.z;
+      return Math.abs(dx * sS + dz * sC) <= shl && Math.abs(dx * sC - dz * sS) <= shw;
+    }
+
+    /** 入位方向判定（积分制）：车与车位矩形有交集期间，按档位方向累计"沿库
+     *  轴的里程"（_fwdIn 前进 / _revIn 倒退），多数派即入位方向。里程按
+     *  |speed·dt·对齐度| 计——垂直库轴的贴库穿行（引道傍库而过，车角扫过
+     *  库矩形）对齐度≈0 不记账；沿库轴的进退全额记账。任何"过冲后回角入纳
+     *  ""前进到差几厘米再倒车旋角""换挡蠕动骗时机"都改变不了账本：前进冲
+     *  进去再倒出来两边账一起涨，最终完成入位的那次插入方向占多数；双侧车道
+     *  连通的库从哪侧入也如实记账。上升沿/锁定/先后顺序类判定均被此类花招
+     *  绕过，弃用。出生即完美入库（账本为空）entryDir 为 null，完成门禁按
+     *  关卡要求放行。 */
+    function trackEntry(dt) {
+      var c = Math.cos(car.heading), s = Math.sin(car.heading);
+      var fx = s, fz = c, ax = c * hw, az = -s * hw;
+      var any = pairIn(car.x + fx * hl + ax, car.z + fz * hl + az) ||
+                pairIn(car.x + fx * hl - ax, car.z + fz * hl - az) ||
+                pairIn(car.x - fx * hl + ax, car.z - fz * hl + az) ||
+                pairIn(car.x - fx * hl - ax, car.z - fz * hl - az);
+      if (any) {
+        var d = Math.abs(car.speed * dt * (s * sS + c * sC));   // 沿库轴里程（对齐度加权）
+        if (car.speed < 0) run._revIn += d; else run._fwdIn += d;
+      }
+      run.entryDir = run._revIn > run._fwdIn ? 'rev' : (run._fwdIn > run._revIn ? 'fwd' : run.entryDir);
+    }
 
     /** input 驱动推进（要求 car.update 存在，如 CarPhysics） */
     run.step = function (dt, input) {
@@ -118,11 +158,16 @@
       } else {
         ev = evaluateNow();
       }
+      /* --- 入位方向记账：只要车角与库有交集就计（与 solver.ledgerStep 同口径；
+       *    不能挂在 reach 粗筛内——中心远但角扫过库时同样要记账） --- */
+      trackEntry(dt);
 
-      /* --- 完成：入位且停稳，保持 stopTime 秒 --- */
+      /* --- 完成：入位且停稳，保持 stopTime 秒；教学关按 entry 要求入位方向 ---
+       * entryDir 无法归因（出生即全入）时按关卡要求放行——正常驾驶不可能触发 */
+      var entryOK = !level.entry || run.entryDir === level.entry || run.entryDir == null;
       var stopped = car.isStopped ? car.isStopped() : Math.abs(car.speed) < PHYS.stoppedEps;
       var completed = false;
-      if (ev.completed && stopped) {
+      if (ev.completed && stopped && entryOK) {
         run._stopTimer += dt;
         if (run._stopTimer >= SC.stopTime) { completed = true; ev = evaluateNow(); }
       } else run._stopTimer = 0;

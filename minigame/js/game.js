@@ -284,7 +284,19 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.setTouchControlsVisible(false);   // 简报态隐藏，开始后显示
 
     var tex = this.textures || (this.textures = PS.Textures.createTextures());
-    this.worldH = PS.World.createWorld(this.scene, lv, tex);
+    /* 标准答案路径：除引导线外，终态车头角还是本关期望车头方向（world.js 画
+     * 车位地面箭头，与完成门禁同一来源）。重放是确定性的 → 按关卡缓存，
+     * 重开/再进不再无头重放整关 */
+    this._guidePaths = this._guidePaths || {};
+    this._guideNose = this._guideNose || {};
+    var path = this._guidePaths[lv.id];
+    if (!path) {
+      var res = PS.Autopilot.runLevel(lv, { record: true });
+      path = this._guidePaths[lv.id] = res.path;
+      if (res.success && res.final) this._guideNose[lv.id] = res.final.heading * 180 / Math.PI;
+    }
+    var noseDeg = this._guideNose[lv.id] != null ? this._guideNose[lv.id] : lv.spot.a;
+    this.worldH = PS.World.createWorld(this.scene, lv, tex, { noseDeg: noseDeg });
     // 地库关压暗天空/雾色：舱内透过车窗不再看到蓝天砖楼，符合地下环境。
     // 复用既有 Color/Fog 实例原地改值（高频换关路径不再每次新建，语义不变）
     if (lv.garage) {
@@ -315,13 +327,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.carP.gear = 'D';
     this.run = PS.Sim.createRun(lv, { car: this.carP });
 
-    /* 引导线：标准答案轨迹。重放是确定性的 → 按关卡缓存，重开/再进不再无头重放整关 */
-    this._guidePaths = this._guidePaths || {};
-    var path = this._guidePaths[lv.id];
-    if (!path) {
-      var res = PS.Autopilot.runLevel(lv, { record: true });
-      path = this._guidePaths[lv.id] = res.path;
-    }
+    /* 引导线：标准答案轨迹（path 已在世界搭建前算好，见上） */
     this.guide = PS.Assist.createGuideLine(this.scene, path);
     this.guide.setVisible(this.assist.guide);
 
@@ -825,9 +831,12 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     var tips = this._tips;
     var tipIdx = tips.length ? Math.floor(this.run.time / 6) % tips.length : -1;
     var nearIn = !ev.completed && ev.inside && ev.posOffset < 3;
+    // 入位方向门禁反馈：停进位但车头先入/车尾先入与教学要求不符，提示玩家重来
+    var wrongEntry = nearIn && this.level.entry && this.run.entryDir && this.run.entryDir !== this.level.entry;
     var hintKey = this.replaying ? 'replay'
       : (this.mirrorMode ? 'm' + this.mirrorSel
-      : (nearIn ? 'near' : 'i' + this.indicator.side + 't' + tipIdx));
+      : (wrongEntry ? 'we' + this.level.entry
+      : (nearIn ? 'near' : 'i' + this.indicator.side + 't' + tipIdx)));
     if (hintKey !== this._hintKey) {
       this._hintKey = hintKey;
       this._hintText = this.replaying ? '复盘回放中 · Esc 暂停 / 退出'
@@ -835,9 +844,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         ? (this.isTouch
           ? '后视镜调节 · 点上方镜子切换 · 按住 ◀▶▲▼ 调角度'
           : '后视镜调节 [' + (this.mirrorSel === 0 ? '左外镜' : this.mirrorSel === 1 ? '右外镜' : '车内镜') + '] · A/D 左右 · W/S 上下 · 1/2/3 切换 · V 完成')
-        : (nearIn ? '很好！停稳保持…'
+        : (wrongEntry
+          ? (this.level.entry === 'rev'
+            ? '停得再正也不算：本关要练倒车入库（车尾先入）· 驶出重新倒入'
+            : '停得再正也不算：本关要练前进入位（车头先入）· 驶出重新驶入')
+          : (nearIn ? '很好！停稳保持…'
           : (this.indicator.side ? '转向灯' + (this.indicator.side === 1 ? '左' : '右')
-            : (tipIdx >= 0 ? tips[tipIdx] : ''))));
+            : (tipIdx >= 0 ? tips[tipIdx] : '')))));
     }
     var st = this._hudState;   // 复用 state 对象（旧实现每帧新字面量）
     st.time = this.run.time; st.collisions = this.run.collisions;

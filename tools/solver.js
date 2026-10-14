@@ -49,8 +49,38 @@ function solve(level, opt) {
     var ev = SCO.evaluate({ x: x, z: z, heading: h, spot: spotJ, collisions: 0, time: 0, par: level.par, carCfg: car, cfg: CFG.SCORE });
     return ev.completed ? ev.devDeg : 1e9;
   }
-  function key(x, z, h) {
-    return Math.round(x * 5) + '|' + Math.round(z * 5) + '|' + Math.round(h * 36 / Math.PI);
+  /* 入位方向教学要求（关卡 entry 标注）：与 sim 完成门禁同一套积分账本——
+   * 车与库有交集期间按档位方向累计沿库轴里程（对齐度加权），多数派即入位
+   * 方向。账本在搜索节点上随 expand 逐步传播（fIn/rIn），目标姿态须账本
+   * 多数派正确；"结尾补段 R 档"的假倒库账本仍是前进主导，过不了目标/验证。 */
+  var goalEntry = level.entry || null;
+  var sS = Math.sin(spotJ.angle), sC = Math.cos(spotJ.angle);
+  var shl = spotJ.l / 2, shw = spotJ.w / 2, cHW = car.width / 2, cHL = car.length / 2;
+  function pairIn(px, pz) {
+    var dx = px - spotJ.x, dz = pz - spotJ.z;
+    return Math.abs(dx * sS + dz * sC) <= shl && Math.abs(dx * sC - dz * sS) <= shw;
+  }
+  /** 账本推进一步（与 js/sim.js trackEntry 同规则，改一边要同步另一边） */
+  function ledgerStep(st, v, stepDt) {
+    var ch = Math.cos(st.h), sh = Math.sin(st.h);
+    var fx = sh, fz = ch, ax = ch * cHW, az = -sh * cHW;
+    var any = pairIn(st.x + fx * cHL + ax, st.z + fz * cHL + az) ||
+              pairIn(st.x + fx * cHL - ax, st.z + fz * cHL - az) ||
+              pairIn(st.x - fx * cHL + ax, st.z - fz * cHL + az) ||
+              pairIn(st.x - fx * cHL - ax, st.z - fz * cHL - az);
+    if (any) {
+      var d = Math.abs(v * stepDt * (sh * sS + ch * sC));
+      if (v < 0) st.rIn += d; else st.fIn += d;
+    }
+  }
+  function entryOK(n) {
+    if (!goalEntry) return true;
+    var margin = (n.rIn || 0) - (n.fIn || 0);
+    return goalEntry === 'rev' ? margin > 0 : margin < 0;
+  }
+  function key(n) {
+    return Math.round(n.x * 5) + '|' + Math.round(n.z * 5) + '|' + Math.round(n.h * 36 / Math.PI) +
+      '|' + Math.round(((n.rIn || 0) - (n.fIn || 0)) * 2);
   }
 
   /* ---- 控制段基元（与执行器同模型） ---- */
@@ -96,10 +126,10 @@ function solve(level, opt) {
   function expand(n, ac) {
     if (n.isStart && ac.g === 'R') return null;
     if (ac.sf !== 0 && n.lastSf !== 0 && ac.g === n.gear) return null;
-    var st = { x: n.x, z: n.z, h: n.h, v: n.v, steer: 0, gear: n.gear };
+    var st = { x: n.x, z: n.z, h: n.h, v: n.v, steer: 0, gear: n.gear, fIn: n.fIn || 0, rIn: n.rIn || 0 };
     if (ac.g !== n.gear && !n.isStart) {
       var guard = 80;
-      while (Math.abs(st.v) > 1e-3 && guard-- > 0) PULSE.brakeStep(st, dt, CFG.PHYS);
+      while (Math.abs(st.v) > 1e-3 && guard-- > 0) { PULSE.brakeStep(st, dt, CFG.PHYS); ledgerStep(st, st.v, dt); }
       st.gear = ac.g;
     } else if (n.isStart) {
       st.gear = ac.g;
@@ -109,6 +139,7 @@ function solve(level, opt) {
     for (var i = 0; i < steps; i++) {
       var isDown = i >= steps - downSteps && ac.sf !== 0;
       PULSE.stepMotion(st, isDown ? 0 : ac.sf, dt, CFG.PHYS, CFG.CAR);
+      ledgerStep(st, st.v, dt);
       if ((i & 3) === 0) {
         if (st.x < b.minX - 1.5 || st.x > b.maxX + 1.5 || st.z < b.minZ - 1.5 || st.z > b.maxZ + 1.5) return null;
         if (collides(st.x, st.z, st.h)) return null;
@@ -116,7 +147,7 @@ function solve(level, opt) {
     }
     if (st.x < b.minX - 1.5 || st.x > b.maxX + 1.5 || st.z < b.minZ - 1.5 || st.z > b.maxZ + 1.5) return null;
     if (collides(st.x, st.z, st.h)) return null;
-    return { x: st.x, z: st.z, h: st.h, v: st.v, gear: ac.g, lastSf: ac.sf };
+    return { x: st.x, z: st.z, h: st.h, v: st.v, gear: ac.g, lastSf: ac.sf, fIn: st.fIn, rIn: st.rIn };
   }
 
   function astar(startState, isGoal, hfn, budget, hWeight, actionSet) {
@@ -125,27 +156,28 @@ function solve(level, opt) {
     var start = {
       x: startState.x, z: startState.z, h: startState.h,
       gear: startState.gear || 'D', lastSf: 0, isStart: !!startState.isStart, v: startState.v || 0, g: 0,
+      fIn: startState.fIn || 0, rIn: startState.rIn || 0,
       f: hw * hfn(startState.x, startState.z, startState.h), par: null, act: null
     };
     if (collides(start.x, start.z, start.h)) return { ok: false, reason: '起点碰撞(含边距)' };
     var open = new Heap(); open.push(start);
-    var bestG = new Map(); bestG.set(key(start.x, start.z, start.h), 0);
+    var bestG = new Map(); bestG.set(key(start), 0);
     var goal = null, exp = 0;
     var minDev = Infinity;
     while (open.size && exp < budget) {
       var n = open.pop();
-      var k0 = key(n.x, n.z, n.h);
+      var k0 = key(n);
       if ((bestG.get(k0) || Infinity) < n.g - 1e-6) continue;
       exp++;
       if (actionSet === 'fine') { var dv = goalDev(n.x, n.z, n.h); if (dv < minDev) minDev = dv; }
       if (opt.progress && exp % 20000 === 0) opt.progress(exp, n);
-      if (isGoal(n.x, n.z, n.h)) { goal = n; break; }
+      if (isGoal(n)) { goal = n; break; }
       for (var ai = 0; ai < acts.length; ai++) {
         var ac = acts[ai];
         var ns = expand(n, ac);
         if (!ns) continue;
         var ng = n.g + 1 + (ac.g !== n.gear ? opt.gearCost || 2.5 : 0) + (ac.g === 'R' ? 0.12 : 0);
-        var kk = key(ns.x, ns.z, ns.h);
+        var kk = key(ns);
         if ((bestG.get(kk) || Infinity) <= ng) continue;
         bestG.set(kk, ng);
         ns.g = ng; ns.f = ng + hw * hfn(ns.x, ns.z, ns.h); ns.par = n; ns.act = ac;
@@ -185,6 +217,7 @@ function solve(level, opt) {
       var dx = spotJ.x - n.x, dz = spotJ.z - n.z;
       var along = dx * Math.sin(n.h) + dz * Math.cos(n.h);
       var g = along >= 0 ? 'D' : 'R';
+      if (goalEntry && g !== (goalEntry === 'rev' ? 'R' : 'D')) return null;   // 末段直滑也须按教学方向驶入
       var dur = Math.abs(along) / CFG.PHYS.demoSpeed;
       var out = segsSoFar.concat([{ g: g, sf: 0, dur: Math.round(dur * 100) / 100 }]);
       return { ok: true, segs: out };
@@ -292,8 +325,8 @@ function solve(level, opt) {
     var vh = via.a * Math.PI / 180;
     var leg1 = astar(
       { x: level.player.x, z: level.player.z, h: level.player.a * Math.PI / 180, gear: 'D', isStart: true },
-      function (x, z, h) {
-        return Math.hypot(x - via.x, z - via.z) < 0.5 && Math.abs(wrapDegRad(h - vh)) < 15 * Math.PI / 180;
+      function (n) {
+        return Math.hypot(n.x - via.x, n.z - via.z) < 0.5 && Math.abs(wrapDegRad(n.h - vh)) < 15 * Math.PI / 180;
       },
       function (x, z, h) { return Math.hypot(x - via.x, z - via.z) + Math.abs(wrapDegRad(h - vh)); },
       maxExp
@@ -303,10 +336,11 @@ function solve(level, opt) {
     legs.push(leg1);
     var leg2 = astar(
       // 关键：继承 leg1 末档位与运动状态（非静止、非 isStart），与执行器衔接一致
-      { x: leg1.end.x, z: leg1.end.z, h: leg1.end.h, v: leg1.end.v, gear: leg1.end.gear, isStart: false },
+      { x: leg1.end.x, z: leg1.end.z, h: leg1.end.h, v: leg1.end.v, gear: leg1.end.gear, isStart: false,
+        fIn: leg1.end.fIn, rIn: leg1.end.rIn },
       // 粗定位：进入车位 2.2m 邻域且姿态大致朝向车位
-      function (x, z, h) {
-        var d2 = Math.hypot(x - spotJ.x, z - spotJ.z), dev2 = SCO.angleDevDeg(h, spotJ.angle);
+      function (n) {
+        var d2 = Math.hypot(n.x - spotJ.x, n.z - spotJ.z), dev2 = SCO.angleDevDeg(n.h, spotJ.angle);
         var okz = d2>0.7&&d2<1.6&&dev2<15;
         return okz;
       },
@@ -315,10 +349,13 @@ function solve(level, opt) {
     if (!leg2.ok) return { ok: false, reason: '入库段:' + leg2.reason, expansions: leg2.expansions };
     totalExp += leg2.expansions;
     legs.push(leg2);
-    if (goalDev(leg2.end.x, leg2.end.z, leg2.end.h) >= 7) {
+    // 精调触发：几何不达标，或入位方向账本不符——粗定位(leg2)目标本身不含
+    // entryOK，跳过精调会让带 via 的关卡绕过教学方向约束
+    if (goalDev(leg2.end.x, leg2.end.z, leg2.end.h) >= 7 || !entryOK(leg2.end)) {
       var fine = astar(
-        { x: leg2.end.x, z: leg2.end.z, h: leg2.end.h, v: leg2.end.v, gear: leg2.end.gear, isStart: false },
-        function (x, z, h) { return goalDev(x, z, h) < 7; },
+        { x: leg2.end.x, z: leg2.end.z, h: leg2.end.h, v: leg2.end.v, gear: leg2.end.gear, isStart: false,
+          fIn: leg2.end.fIn, rIn: leg2.end.rIn },
+        function (n) { return goalDev(n.x, n.z, n.h) < 7 && entryOK(n); },
         goalHfn, 90000, 1.3, 'fine'
       );
       if (fine.ok) {
@@ -333,7 +370,7 @@ function solve(level, opt) {
   } else {
     var leg = astar(
       { x: level.player.x, z: level.player.z, h: level.player.a * Math.PI / 180 },
-      function (x, z, h) { return goalDev(x, z, h) < 7; },
+      function (n) { return goalDev(n.x, n.z, n.h) < 7 && entryOK(n); },
       goalHfn, maxExp
     );
     if (!leg.ok) return { ok: false, reason: leg.reason, expansions: leg.expansions };
@@ -382,21 +419,34 @@ var fail = 0;
 levels.forEach(function (lv) {
   var r = null, verified = false, gearCosts = [2.5, 5, 8, 14];
   var tries = [margin, 0.18, 0.12];
-  outer:
-  for (var gi = 0; gi < gearCosts.length; gi++) {
-    for (var ti = 0; ti < tries.length; ti++) {
-      r = solve(lv, { margin: tries[ti], gearCost: gearCosts[gi] });
-      if (!r.ok) continue;
-      var vr = AUTO.runLevel(lv, { phasesOverride: r.segs, maxTime: lv.par * 4 + 60 });
-      if (vr.success && vr.collisions <= 2) { verified = true; break outer; }
-      if (process.env.VERBOSE) {
-        console.log('    尝试 margin=' + tries[ti] + ' gearCost=' + gearCosts[gi] +
-          ' 段数=' + r.segs.length + ' -> 成功=' + vr.success + ' 碰撞=' + vr.collisions +
-          (vr.result ? ' 偏差=' + vr.result.posOffset.toFixed(2) + '/' + vr.result.devDeg.toFixed(1) + '°' : ' (' + vr.reason + ')') +
-          (vr.hits.length ? ' 首撞@t' + vr.hits[0].t.toFixed(1) + ' ' + vr.hits[0].obst : ''));
+  /** 参数阶梯：边距 × 换挡代价全组合，首个重放验证通过者胜出 */
+  function ladder(target) {
+    for (var gi = 0; gi < gearCosts.length; gi++) {
+      for (var ti = 0; ti < tries.length; ti++) {
+        var rr = solve(target, { margin: tries[ti], gearCost: gearCosts[gi] });
+        if (!rr.ok) continue;
+        var vr = AUTO.runLevel(lv, { phasesOverride: rr.segs, maxTime: lv.par * 4 + 60 });
+        if (vr.success && vr.collisions <= 2) { r = rr; verified = true; return true; }
+        if (process.env.VERBOSE) {
+          console.log('    尝试 margin=' + tries[ti] + ' gearCost=' + gearCosts[gi] +
+            ' 段数=' + rr.segs.length + ' -> 成功=' + vr.success + ' 碰撞=' + vr.collisions +
+            (vr.result ? ' 偏差=' + vr.result.posOffset.toFixed(2) + '/' + vr.result.devDeg.toFixed(1) + '°' : ' (' + vr.reason + ')') +
+            (vr.hits.length ? ' 首撞@t' + vr.hits[0].t.toFixed(1) + ' ' + vr.hits[0].obst : ''));
+        }
+        rr.verifyFail = '重放验证未过: 成功=' + vr.success + ' 碰撞=' + vr.collisions + (vr.result ? ' 偏差=' + vr.result.posOffset.toFixed(2) : ' (' + vr.reason + ')');
+        if (!r || r.ok === false) r = rr;
+        if (!r.verifyFail) r.verifyFail = rr.verifyFail;
       }
-      r.verifyFail = '重放验证未过: 成功=' + vr.success + ' 碰撞=' + vr.collisions + (vr.result ? ' 偏差=' + vr.result.posOffset.toFixed(2) : ' (' + vr.reason + ')');
     }
+    return false;
+  }
+  ladder(lv);
+  if (!verified && lv.via) {
+    // via 只是求解引导（执行器/门禁都不用它）；带 via 全组合失败时去掉重解——
+    // 入位方向账本仍约束教学方向，掉头等自由段交给搜索自行组织
+    var free = JSON.parse(JSON.stringify(lv));
+    delete free.via;
+    ladder(free);
   }
   if (r && r.ok) {
     console.log((verified ? '✓' : '△') + ' ' + lv.id + ' ' + lv.name +
