@@ -103,7 +103,8 @@ try {
   console.log('\n' + failed + ' 项失败（加载即崩，后续跳过）');
   process.exit(1);
 }
-check('入口按序加载了全部 ' + 27 + ' 个模块', Object.keys(loadedModules).length === 27,
+/* 模块数 = tools/build_wx.js MODULES（v1.6 加 levels/douyin.js 后 28） */
+check('入口按序加载了全部 ' + 28 + ' 个模块', Object.keys(loadedModules).length === 28,
   '实际 ' + Object.keys(loadedModules).length);
 
 var PS = sandbox.PS;

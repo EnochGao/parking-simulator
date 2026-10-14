@@ -32,7 +32,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     CHAPTERS = [
       require('./levels/basic.js'),
       require('./levels/advanced.js'),
-      require('./levels/challenge.js')
+      require('./levels/challenge.js'),
+      require('./levels/douyin.js')
     ];
   } else {
     KIT = root.PS.LevelKit;

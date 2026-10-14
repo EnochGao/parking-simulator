@@ -36,6 +36,7 @@ var MODULES = [
   'js/levels/basic.js',
   'js/levels/advanced.js',
   'js/levels/challenge.js',
+  'js/levels/douyin.js',
   'js/levels.js',
   'js/autopilot.js',
   'js/progress.js',
