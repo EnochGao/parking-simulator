@@ -95,9 +95,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._tips = [];                       // 本关教学要点（loadLevel 填充）
     this._hudState = { time: 0, collisions: 0, gear: 'D', speed: 0, radar: null, radarRange: 2.5, hint: '', assistText: '' };
     this._topOn = false;     // 俯视开关沿：开启瞬间刷新一次俯视投影矩阵
-    this._topYaw = 0;        // 俯视镜头当前偏航（死区+阻尼跟随车头，见 updateVisuals）
-    this._topChase = false;  // 俯视回正进行中：偏出死区置位，回到对齐角锁正并复位
-    this._topManual = false; // 手动旋转过镜头：暂停自动跟随，R 回正恢复
+    this._topYaw = 0;        // 俯视镜头当前偏航（完全由用户掌控：拖拽/,/./LB/RB 旋转，R 对齐车头）
+    this._topManual = false; // 手动旋转过镜头：仅用于 HUD"R 回正"提示
     this._topRot = 0;        // 键盘 ,/. 持续旋转方向（-1/0/1，keyup 清零）
     /* 镜面/倒影 RT 脏检查（见 render）：静止泊车时不重绘 3 面镜 + 倒影共 4 遍场景 */
     this._mirrorsDirty = false;
@@ -179,7 +178,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         case 'KeyC': self.toggleRevCam(); break;
         case 'KeyQ': self.indicator.side = self.indicator.side === 1 ? 0 : 1; break;
         case 'KeyE': self.indicator.side = self.indicator.side === 2 ? 0 : 2; break;
-        case 'Comma': self._topRot = -1; break;   // 俯视镜头左旋=画面逆时针（方向盘隐喻，与拖拽往左拉同向）
+        case 'Comma': self._topRot = -1; break;   // 俯视镜头左旋=画面逆时针（方向盘隐喻，与双指拧/拖拽抓转同向）
         case 'Period': self._topRot = 1; break;   // 俯视镜头右旋=画面顺时针
         case 'KeyR': if (self.assist.top) self.resetTopCamera(); break;
         case 'KeyZ': self.lookHeld = 1; break;  // 按住转头看左后视镜
@@ -203,24 +202,29 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       if (e.code === 'Period' && self._topRot === 1) self._topRot = 0;
     });
 
-    /* 俯视镜头手势：鼠标拖拽 / 触屏单指横拖（移动端浏览器）/ 双指拧。抓地图手感——
-     * 手往哪边拉/拧，画面跟着转（实测标定：yaw 增 = 画面顺时针；拖右/顺拧应让世界
-     * 顺时针，故取正增量）。触摸事件走 platform 归一化总线（网页 canvas 事件 /
-     * 小游戏全局触摸分发同构）；单指横拖仅网页端在此处理——小游戏端无 target
-     * 信息（总线收全屏触摸，分不出是否压在虚拟键上），由 ui_wx 按控件命中
-     * 判定空白触点后调 rotateTopCamera，逻辑同源 */
+    /* 俯视镜头手势：鼠标拖拽 / 触屏单指（移动端浏览器）/ 双指拧。抓图手感——
+     * 手指按住画面哪一点，那点就跟着手指绕屏心（车辆所在）转（VIEW_TOP.dragRad
+     * 极角差映射，任意方向拖拽一致），画面顺拧/顺拖即顺转。触摸事件走 platform
+     * 归一化总线（网页 canvas 事件 / 小游戏全局触摸分发同构）；单指仅网页端在此
+     * 处理——小游戏端无 target 信息（总线收全屏触摸，分不出是否压在虚拟键上），
+     * 由 ui_wx 按控件命中判定空白触点后调 rotateTopCamera，映射同一份 dragRad */
     var canvas = this.renderer.domElement;
     var drag = null, twist = null, tdrag = null;
+    function canvasCenter() {
+      var r = canvas.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
     PLAT.onCanvasMouse(canvas, {
       down: function (e) {
         if (e.button !== 0 || !self.assist.top || self.state !== 'playing') return;
-        drag = { x: e.clientX };
+        var c = canvasCenter();
+        drag = { x: e.clientX, y: e.clientY, cx: c.x, cy: c.y };
       },
       move: function (e) {
         if (!drag) return;
-        var dx = e.clientX - drag.x;
-        drag.x = e.clientX;
-        self.rotateTopCamera(dx * self.cfg.VIEW_TOP.dragRate * Math.PI / 180);
+        var da = self.cfg.VIEW_TOP.dragRad(drag.x, drag.y, e.clientX, e.clientY, drag.cx, drag.cy);
+        drag.x = e.clientX; drag.y = e.clientY;
+        self.rotateTopCamera(da);
       },
       up: function () { drag = null; }
     });
@@ -235,10 +239,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
           e.preventDefault();   // 拧动期间屏蔽浏览器双指缩放
         } else {
           twist = null;
-          /* 单指横拖与 PC 鼠标拖拽同源同灵敏度。网页端虚拟键是独立 DOM 元素，
+          /* 单指抓转与 PC 鼠标拖拽同一 dragRad 映射。网页端虚拟键是独立 DOM 元素，
            * 事件 target=canvas 即空白处，不会与按键冲突 */
           tdrag = (PLAT.isWeb && e.touches.length === 1 && self.assist.top && self.state === 'playing')
-            ? { x: e.touches[0].clientX, id: e.touches[0].identifier } : null;
+            ? (function () {
+                var c = canvasCenter(), t0 = e.touches[0];
+                return { x: t0.clientX, y: t0.clientY, cx: c.x, cy: c.y, id: t0.identifier };
+              })() : null;
         }
       },
       move: function (e) {
@@ -253,9 +260,10 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
           return;
         }
         if (tdrag && e.touches.length === 1 && e.touches[0].identifier === tdrag.id) {
-          var tdx = e.touches[0].clientX - tdrag.x;
-          tdrag.x = e.touches[0].clientX;
-          self.rotateTopCamera(tdx * self.cfg.VIEW_TOP.dragRate * Math.PI / 180);
+          var t0 = e.touches[0];
+          var tda = self.cfg.VIEW_TOP.dragRad(tdrag.x, tdrag.y, t0.clientX, t0.clientY, tdrag.cx, tdrag.cy);
+          tdrag.x = t0.clientX; tdrag.y = t0.clientY;
+          self.rotateTopCamera(tda);
           e.preventDefault();
         }
       },
@@ -341,7 +349,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._frameDirty = true;                 // 新世界至少画一帧，简报叠加层背后才有画面
     this._lastRevOn = null; this._lastRevSteer = 0;
     this.usingTop = false; this.assist.top = false;
-    this._topYaw = 0; this._topChase = false; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
+    this._topYaw = 0; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
     this._tips = lv.tips || [];              // 无 tips 关不再每帧兜底新建空数组
     this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions, nose: noseTxt });
     this.state = 'briefing';
@@ -903,32 +911,15 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       if (this._topOn) {
         this.syncTopProjection();
         this._topYaw = carP.heading;  // 开启瞬间直接对齐车头，无开场旋转
-        this._topChase = false;
+        this._topManual = false;      // 重新对齐即复位"手动过"提示
       }
     }
     if (this.assist.top) {
-      /* 正向车操作：up 对齐车头，前进永远是"往上"。跟转带死区+阻尼——
-       * 小幅方向修正不转镜（世界基本静止，防晕）；偏出死区才平滑回正，
-       * 回到对齐角即锁正。手动旋转过（,/./LB/RB/拖拽/双指拧）则跟随挂起 */
-      var TC = this.cfg.VIEW_TOP, D2R = Math.PI / 180;
-      if (this._topRot) {
-        this._topYaw += this._topRot * TC.rotateRate * elapsed;
-        this._topManual = true;
-      }
-      if (!this._topManual) {
-        var yawDiff = carP.heading - this._topYaw;
-        while (yawDiff > Math.PI) yawDiff -= 2 * Math.PI;
-        while (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
-        if (!this._topChase && Math.abs(yawDiff) > TC.deadZoneDeg * D2R) this._topChase = true;
-        if (this._topChase) {
-          if (Math.abs(yawDiff) < TC.settleDeg * D2R) {
-            this._topYaw = carP.heading;  // 对齐即锁正，避免渐进收敛的残余摆动
-            this._topChase = false;
-          } else {
-            this._topYaw += yawDiff * (1 - Math.exp(-TC.followRate * elapsed));
-          }
-        }
-      }
+      /* 镜头朝向完全由用户掌控：拖拽（dragRad 极角抓转，内容跟手）/,/./LB/RB、
+       * 双指拧手动旋转，R 对齐车头。车辆移动只平移画面（镜头始终锁定车顶正上方），
+       * 不再自动回转——转向时世界保持用户选定的朝向，不掉头不甩动 */
+      var TC = this.cfg.VIEW_TOP;
+      if (this._topRot) { this._topYaw += this._topRot * TC.rotateRate * elapsed; this._topManual = true; }
       this.topCamera.position.set(carP.x, 42, carP.z);
       this.topCamera.up.set(Math.sin(this._topYaw), 0, Math.cos(this._topYaw));
       this.topCamera.lookAt(carP.x, 0, carP.z);
@@ -982,18 +973,17 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.topCamera.updateProjectionMatrix();
   };
 
-  /** 俯视镜头手动旋转（增量弧度）：键盘 ,/. 持续、手柄 LB/RB 持续、鼠标拖拽/双指拧按增量。
-   *  手动过即暂停自动跟随（用户选定的朝向优先），R 回正恢复 */
+  /** 俯视镜头手动旋转（增量弧度）：键盘 ,/. 持续、手柄 LB/RB 持续、鼠标拖拽/触屏单指/
+   *  双指拧按 dragRad 极角增量。置"手动过"标记供 HUD 提示 R 回正 */
   Game.prototype.rotateTopCamera = function (deltaRad) {
     this._topYaw += deltaRad;
     this._topManual = true;
   };
 
-  /** 俯视镜头回正：对齐车头并恢复自动跟随 */
+  /** 俯视镜头回正：对齐车头并清除"手动过"提示 */
   Game.prototype.resetTopCamera = function () {
     if (!this.carP) return;
     this._topYaw = this.carP.heading;
-    this._topChase = false;
     this._topManual = false;
   };
 

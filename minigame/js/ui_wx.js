@@ -808,16 +808,15 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
             if (cur.hudApi && cur.hudApi.onAudioToggle) cur.hudApi.onAudioToggle();
           }
         }
-        /* 俯视空白处单指横拖调镜头（与 PC 鼠标拖拽同源同灵敏度）：该指未命中
-         * 任何控件/HUD音效chip 才启动；游戏端 rotateTopCamera 已有"手动过即
-         * 挂起自动跟随"，拖拽期间按住驾驶键不受影响（多点各键独立） */
+        /* 俯视空白处单指抓转调镜头（与 PC 鼠标拖拽同一 dragRad 极角映射）：该指未命中
+         * 任何控件/HUD音效chip 才启动；拖拽期间按住驾驶键不受影响（多点各键独立） */
         var ar = cur.hud.visible && cur.hud.audioRect ? cur.hud.audioRect : null;
         var grabbed = (ar && p.x >= ar.x && p.x <= ar.x + ar.w && p.y >= ar.y && p.y <= ar.y + ar.h) ||
           !!cur.tc.holds[id] || (cur.pressed && cur.pressed.id === id) ||
           (cur.tc.wheelGrab && cur.tc.wheelGrab.id === id);
         if (!grabbed && ev.touches.length === 1 && cur.game.state === 'playing' &&
             cur.game.assist && cur.game.assist.top)
-          cur.tc.camDrag = { id: id, x: p.x };
+          cur.tc.camDrag = { id: id, x: p.x, y: p.y };
       } else if (cur.hud.visible && cur.hud.audioRect) {   // 键盘设备菜单态等边缘情形
         var a2 = cur.hud.audioRect;
         if (p.x >= a2.x && p.x <= a2.x + a2.w && p.y >= a2.y && p.y <= a2.y + a2.h) {
@@ -863,12 +862,12 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         }
       } else if (cur.tc.camDrag && cur.tc.camDrag.id === id && cur.tc.visible &&
                  cur.game.state === 'playing' && cur.game.assist && cur.game.assist.top) {
-        /* 镜头跟指横拖：dx → yaw（dragRate °/px 与 PC 鼠标拖拽同源）。
+        /* 镜头跟指抓转：触点绕屏心极角差 → yaw（VIEW_TOP.dragRad，与 PC 鼠标拖拽同一映射）。
          * 俯视半途关闭/暂停则静默丢弃（抬起即清） */
-        var dxc = p.x - cur.tc.camDrag.x;
-        cur.tc.camDrag.x = p.x;
-        if (cur.game.rotateTopCamera)
-          cur.game.rotateTopCamera(dxc * cur.game.cfg.VIEW_TOP.dragRate * Math.PI / 180);
+        var cd = cur.tc.camDrag;
+        var da = cur.game.cfg.VIEW_TOP.dragRad(cd.x, cd.y, p.x, p.y, cur.W / 2, cur.H / 2);
+        cd.x = p.x; cd.y = p.y;
+        if (cur.game.rotateTopCamera) cur.game.rotateTopCamera(da);
       }
     }
   }

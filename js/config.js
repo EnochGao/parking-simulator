@@ -94,11 +94,20 @@
     // 内镜 3.2:1 扁长镜片因此呈现宽幅后窗视野而非水平拉伸画面；
     // revFov 100（水平≈130°）：对标真实倒车影像的广角（130°+），保证车尾后 0.3m 起近地可见
     VIEW_TOP: {
-      deadZoneDeg: 28,   // 俯视跟转死区：车头相对镜头偏转超过此角才启动回转（小幅修正不转镜，防晕）
-      settleDeg: 2,      // 回转至此偏差内视为对齐，锁正镜头
-      followRate: 7,     // 回转指数阻尼速率（1/s），越大跟得越紧
       rotateRate: 2.4,   // 手动旋转速率（rad/s，≈140°/s）：键盘 ,/. 与手柄 LB/RB 按住持续旋转
-      dragRate: 0.35     // 鼠标拖拽灵敏度（°/px）：抓住地图拖动，拖满 1280px 宽约 450°
+      dragSoftPx: 70,    // 拖拽软半径（px）：抓点距屏心更近时角速度按 r/值 线性衰减（极角在圆心发散，防抖）
+      /* 抓图式拖拽旋转：前后触点绕屏幕中心（车辆所在）的极角差（rad）。
+       * 内容跟手——按住画面哪一点，那点就跟着手指绕车转，任意方向拖拽手感一致
+       * （旧"横拖按像素"映射在下半屏左右反向、竖拖无响应）。跨屏心由 wrap 兜底，
+       * 软半径衰减替代硬限幅：远处快速甩动不丢灵敏度 */
+      dragRad: function (x0, y0, x1, y1, cx, cy) {
+        var dx0 = x0 - cx, dy0 = y0 - cy, dx1 = x1 - cx, dy1 = y1 - cy;
+        var da = Math.atan2(dy1, dx1) - Math.atan2(dy0, dx0);
+        if (da > Math.PI) da -= 2 * Math.PI;
+        if (da < -Math.PI) da += 2 * Math.PI;
+        var r0 = Math.sqrt(dx0 * dx0 + dy0 * dy0), r1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+        return da * Math.min(1, Math.min(r0, r1) / this.dragSoftPx);
+      }
     }
   };
   /** 物理指纹：CAR+PHYS 的稳定哈希（键序无关）。tools/solver.js 烘焙 demo_paths.js 时
