@@ -34,7 +34,7 @@ require('./js/level_kit.js');
 require('./js/levels/basic.js');
 require('./js/levels/advanced.js');
 require('./js/levels/challenge.js');
-require('./js/levels/douyin.js');
+require('./js/levels/scenes.js');
 require('./js/levels.js');
 require('./js/autopilot.js');
 require('./js/progress.js');

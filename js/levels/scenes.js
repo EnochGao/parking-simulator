@@ -1,5 +1,5 @@
-/* 第四章·抖音场景篇：抖音学车博主同款"场景 × 方法"专项（lv16-20）。构造器见 js/level_kit.js。
- * 调研依据与场景→方法映射见 docs/RESEARCH_DOUYIN_LEVELS.md：
+/* 第四章·场景篇：学车博主同款"场景 × 方法"专项（lv16-20）。构造器见 js/level_kit.js。
+ * 调研依据与场景→方法映射见 docs/RESEARCH_SCENES_LEVELS.md：
  * 车头入库（引擎盖盖线）、侧方 B 柱借位切入、窄巷三把轮掉头、断头路倒数第二位、机械车位对正直倒。 */
 (function (root, factory) {
   var api = factory(root);
@@ -10,7 +10,7 @@
   var car = K.car, wall = K.wall, bldg = K.bldg, pillar = K.pillar, tree = K.tree, bin = K.bin, neighbors = K.neighbors;
 
   return {
-    title: '第四章·抖音场景篇', levels: [
+    title: '第四章·场景篇', levels: [
       /* ---------------- 16 车头入库（非字形前进入位：引擎盖盖线回轮） ---------------- */
       {
         id: 'lv16', name: '车头入库·前进入位', diff: 2, par: 55, entry: 'fwd',

@@ -3,7 +3,7 @@
  * 导航请求离线兜底 index.html。发版改 CACHE 版本号（旧缓存 activate 时清理）。
  * 注意：ASSETS 与 index.html 引用保持一致——tests/run_all.js 有一致性校验。 */
 'use strict';
-var CACHE = 'parkmaster-v1.6.4';
+var CACHE = 'parkmaster-v1.6.5';
 var ASSETS = [
   './',
   './index.html',
@@ -24,7 +24,7 @@ var ASSETS = [
   './js/levels/basic.js',
   './js/levels/advanced.js',
   './js/levels/challenge.js',
-  './js/levels/douyin.js',
+  './js/levels/scenes.js',
   './js/levels.js',
   './js/autopilot.js',
   './js/progress.js',

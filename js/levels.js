@@ -29,7 +29,7 @@
       require('./levels/basic.js'),
       require('./levels/advanced.js'),
       require('./levels/challenge.js'),
-      require('./levels/douyin.js')
+      require('./levels/scenes.js')
     ];
   } else {
     KIT = root.PS.LevelKit;
