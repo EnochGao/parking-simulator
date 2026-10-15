@@ -459,6 +459,7 @@ section('座舱转向标定');
   if (!global.THREE) global.THREE = require(path.join(__dirname, '..', 'vendor', 'three.min.js'));
   var PS_ = global.PS = global.PS || {};
   PS_.VIEW = CFG.VIEW; PS_.CAR = CFG.CAR;
+  PS_.CarModel = require(path.join(__dirname, '..', 'js', 'carModel.js'));
   PS_.Cockpit = require(path.join(__dirname, '..', 'js', 'cockpit.js'));
   var carGroup = new global.THREE.Group();
   var cockpit = PS_.Cockpit.buildInterior(carGroup);
@@ -480,6 +481,16 @@ section('座舱转向标定');
   check('座舱：12 点回正标线挂在方向盘组顶部', !!stripe && stripe.parent === wheel &&
     Math.abs(stripe.position.y - 0.175) < 1e-9 && Math.abs(stripe.position.x) < 1e-9,
     stripe ? ('y=' + stripe.position.y.toFixed(3)) : '缺失');
+  /* 静止内饰收编合并：纯色 Lambert 件拼成单 vertexColors Mesh（主视图 -30 draw call）；
+   * 方向盘组/液晶屏/息屏背板必须留在合并之外 */
+  var mergedCount = 0, basicCount = 0;
+  carGroup.traverse(function (o) {
+    if (!o.isMesh) return;
+    if (o.material.vertexColors) mergedCount++;
+    if (o.material.isMeshBasicMaterial && !o.material.map) basicCount++;
+  });
+  check('座舱：静止内饰合并为单 Mesh（vertexColors×1）', mergedCount === 1, 'merged=' + mergedCount);
+  check('座舱：不受光件留在合并外（息屏背板 Basic 仍在）', basicCount >= 1, 'basic=' + basicCount);
 })();
 
 /* ---------------- 12. 脉冲积分（pulse）单元测试 ---------------- */
@@ -673,6 +684,11 @@ section('复盘回放');
   check('回放：超带后中性制动（与真人松手一致）', tp.isDone() && got[4].holdSteer === true && got[4].drive === 0);
   tp.seek(0);
   check('回放：seek 可从头重演', tp.sample().drive === 1 && !tp.isDone());
+  /* reset 后再录：api.tape 与闭包 tape 必须同一数组——换关 reset 后 _finish 读
+   * api.tape，若各持一份会把上一局的旧录像带冻结给复盘回放 */
+  rec.reset();
+  rec.sample(); rec.sample();
+  check('录像：reset 后从零重录且写进同一条带', rec.tape.length === 2 && rec.tape[0].s === 0);
   /* 端到端确定性：同一输入序列驱动 sim 两次，轨迹/碰撞/得分逐项一致 */
   function playOnce() {
     var lv = LVL.byId('lv02');

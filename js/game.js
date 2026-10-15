@@ -29,11 +29,18 @@
     var PLAT = PS.Platform;
     var scrCanvas = PLAT.createScreenCanvas();
     var glCtx = PLAT.createGlContext(scrCanvas, { antialias: true, alpha: false });
-    this.renderer = new THREE.WebGLRenderer({ canvas: scrCanvas, context: glCtx || undefined, antialias: true });
+    /* 触屏机型的阴影降为 PCF（少一档采样），桌面保留软阴影——阴影档须在建渲染器时定，
+     * 运行中改 shadowMap.type 需全材质重编译 */
+    var coarse = PLAT.isCoarsePointer();
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: scrCanvas, context: glCtx || undefined, antialias: true,
+      powerPreference: 'high-performance',   // 双显卡笔记本强制独显
+      stencil: false                          // 场景不用模板缓冲，省一次清屏平面
+    });
     this.renderer.setPixelRatio(Math.min(PLAT.pixelRatio(), 1.5));
     this.renderer.setSize(Math.max(1, PLAT.width()), Math.max(1, PLAT.height()));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = coarse ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false;  // 阴影按需更新（见 updateVisuals）：泊车大部分时间车辆静止，
                                                  // 跳过每帧 2048² 阴影重绘；车辆位移/转向时置 needsUpdate
     PLAT.attachScreenCanvas(scrCanvas, container);
@@ -105,8 +112,9 @@
     this.bindInput();
     /* 触屏设备（手机/平板）：虚拟驾驶控件 + 画质触屏档（见 buildTouchControls/applyTouchQuality）。
      * 必须在首次 loadLevel（首次建 rig/渲染）之前完成。
-     * UI 实现按平台调度：网页 DOM / 小游戏 canvas（ui.js） */
-    this.isTouch = PLAT.isCoarsePointer();
+     * UI 实现按平台调度：网页 DOM / 小游戏 canvas（ui.js）。
+     * 触屏检测已在建渲染器时做过（阴影档同源），此处复用 */
+    this.isTouch = coarse;
     if (this.isTouch) {
       PLAT.setBodyClass('add', 'touch-mode');
       this.applyTouchQuality();
@@ -122,15 +130,24 @@
     this.replaying = false;       // 回放中：跳过落档、驾驶控件不响应
     this._replayTape = null;      // 最近一局的冻结录像带（结算界面回放按钮的依据）
     var self = this;
+    /* resize 合帧：桌面拖拽缩放/移动端旋转会连发 resize，rAF 每帧最多执行一次
+     * 画布重设 + 两次投影矩阵重算；visibilitychange 回前台的修复也走此路径
+     * （rAF 在下一帧绘制前触发，不会闪黑） */
+    this._resizeQueued = false;
     this.onResize = function () {
-      var w = Math.max(1, PLAT.width()), h = Math.max(1, PLAT.height());
-      self._viewAspect = w / h;
-      PLAT.setBodyClass('toggle', 'portrait', h > w);  // 竖屏提示用（仅触屏模式下可见）
-      self.renderer.setSize(w, h);
-      self.camera.aspect = w / h;
-      self.camera.updateProjectionMatrix();
-      self.syncTopProjection();  // 俯视水平视域随宽高比扩展，resize 时同步
-      self._frameDirty = true;   // 画布已换新缓冲，叠加层背后的最后一帧必须补画
+      if (self._resizeQueued) return;
+      self._resizeQueued = true;
+      requestAnimationFrame(function () {
+        self._resizeQueued = false;
+        var w = Math.max(1, PLAT.width()), h = Math.max(1, PLAT.height());
+        self._viewAspect = w / h;
+        PLAT.setBodyClass('toggle', 'portrait', h > w);  // 竖屏提示用（仅触屏模式下可见）
+        self.renderer.setSize(w, h);
+        self.camera.aspect = w / h;
+        self.camera.updateProjectionMatrix();
+        self.syncTopProjection();  // 俯视水平视域随宽高比扩展，resize 时同步
+        self._frameDirty = true;   // 画布已换新缓冲，叠加层背后的最后一帧必须补画
+      });
     };
     PLAT.setBodyClass('toggle', 'portrait', PLAT.height() > PLAT.width());
     PLAT.onResize(this.onResize);
@@ -268,6 +285,37 @@
   };
 
   /* ---------- 关卡装载 ---------- */
+  /** 引导线路径获取（按关卡缓存；未命中时无头重放整关求解——单次约 5~50ms，
+   *  同步调用会阻塞出简报帧，故选关/结算页空闲预取，见 prefetchPaths）。
+   *  终态车头角另存 _guideNose（world 箭头与 HUD 文案同源） */
+  Game.prototype.computeGuidePath = function (lv) {
+    var PS = this.PS;
+    this._guidePaths = this._guidePaths || {};
+    this._guideNose = this._guideNose || {};
+    if (this._guidePaths[lv.id]) return this._guidePaths[lv.id];
+    var res = PS.Autopilot.runLevel(lv, { record: true });
+    this._guidePaths[lv.id] = res.path;
+    if (res.success && res.final) this._guideNose[lv.id] = res.final.heading * 180 / Math.PI;
+    return this._guidePaths[lv.id];
+  };
+
+  /** 标准答案路径空闲预取：分片求解进缓存（每片间隔让出主线程，浏览选关页不掉帧），
+   *  玩家点选关卡时 loadLevel 即刻命中缓存。已入缓存的关卡自动跳过；与 loadLevel
+   *  并发安全——命中检查在出队时再做一次 */
+  Game.prototype.prefetchPaths = function (ids) {
+    var self = this;
+    this._pq = (this._pq || []).concat(ids);
+    if (this._pqBusy) return;
+    this._pqBusy = true;
+    (function next() {
+      var id = self._pq.shift();
+      if (id == null) { self._pqBusy = false; return; }
+      var lv = self.PS.Levels.byId(id);
+      if (lv && !(self._guidePaths && self._guidePaths[id])) self.computeGuidePath(lv);
+      setTimeout(next, 80);
+    })();
+  };
+
   Game.prototype.loadLevel = function (id, mode) {
     var PS = this.PS;
     var lv = PS.Levels.byId(id);
@@ -290,15 +338,8 @@
     var tex = this.textures || (this.textures = PS.Textures.createTextures());
     /* 标准答案路径：除引导线外，终态车头角还是本关期望车头方向（world.js 画
      * 车位地面箭头，与完成门禁同一来源）。重放是确定性的 → 按关卡缓存，
-     * 重开/再进不再无头重放整关 */
-    this._guidePaths = this._guidePaths || {};
-    this._guideNose = this._guideNose || {};
-    var path = this._guidePaths[lv.id];
-    if (!path) {
-      var res = PS.Autopilot.runLevel(lv, { record: true });
-      path = this._guidePaths[lv.id] = res.path;
-      if (res.success && res.final) this._guideNose[lv.id] = res.final.heading * 180 / Math.PI;
-    }
+     * 重开/再进不再无头重放整关；选关/结算页的空闲预取见 prefetchPaths */
+    var path = this.computeGuidePath(lv);
     var noseDeg = this._guideNose[lv.id] != null ? this._guideNose[lv.id] : lv.spot.a;
     this.worldH = PS.World.createWorld(this.scene, lv, tex, { noseDeg: noseDeg });
     /* 车头朝向文案：与地面箭头同一来源（演示终态车头角），相对车位轴算朝里/朝外
@@ -389,8 +430,11 @@
     var q = this.cfg.QUALITY && this.cfg.QUALITY.touch;
     if (!q) return;
     /* 像素比取 Platform（网页 window.devicePixelRatio / 小游戏 wx.getWindowInfo().pixelRatio）——
-     * 小游戏环境 window=GameGlobal 上没有 devicePixelRatio，直读会把像素比兜底成 1，真机整屏发糊 */
-    if (q.pixelRatioMax) this.renderer.setPixelRatio(Math.min(this.PS.Platform.pixelRatio() || 1, q.pixelRatioMax));
+     * 小游戏环境 window=GameGlobal 上没有 devicePixelRatio，直读会把像素比兜底成 1，真机整屏发糊。
+     * 分端取上限：wx 保持 2（真机合成器偏糊的回调）；网页触屏 1.5 与桌面一致——
+     * 手机 dpr 2~3 的全屏填充率是最弱 GPU 的主要预算 */
+    var prMax = (this.PS.Platform.isWx || !q.pixelRatioMaxWeb) ? q.pixelRatioMax : q.pixelRatioMaxWeb;
+    if (prMax) this.renderer.setPixelRatio(Math.min(this.PS.Platform.pixelRatio() || 1, prMax));
     if (q.shadowSize) this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
     if (q.mirrorRtW) this.cfg.QUALITY.mirrorRtW = q.mirrorRtW;
     if (q.revRtW) this.cfg.QUALITY.revRtW = q.revRtW;
@@ -445,7 +489,7 @@
       return { el: b, setOn: function (on) { b.classList.toggle('on', on); } };
     }
 
-    /** 模拟量方向盘（v2 规划项：替换 ◀▶ 数字转向键）。抓轮缘绕中心旋转（与真车
+    /** 模拟量方向盘。抓轮缘绕中心旋转（与真车
      *  同向：轮顺时针=车右转、逆时针=车左转），松手保持转角（与 A/D 松开一致），
      *  双击回正。转角写入 self.touchAnalog.steer，经 input.js 与键盘/手柄同通道合并 */
     function steerWheel() {
@@ -688,6 +732,8 @@
       unlockAll: PS.Platform.getParam('unlock') === '1'
     });
     this.hud.showLevelSelect(items, function (lv) { self.loadLevel(lv.id, 'play'); }, function () { self.toMenu(); });
+    /* 浏览选关页的空闲时间预取各关标准答案路径：点选即命中缓存，出简报零卡顿 */
+    this.prefetchPaths(PS.Levels.LEVELS.map(function (l) { return l.id; }));
   };
 
   /** 终局流转共用（完成/碰撞超限仅音效语义不同，此前两份近乎重复的实现收编）。
@@ -710,6 +756,9 @@
       function () { self.toMenu(); },
       this.hasNext(),
       this._replayTape ? function () { self.startReplay(); } : null);
+    /* 结算页空闲预取下一关路径：点"下一关"出简报零卡顿 */
+    var nx = this.PS.Progress.next(this.PS.Levels.LEVELS, this.level);
+    if (nx) this.prefetchPaths([nx.id]);
   };
 
   /** 复盘回放：重进关卡，由录像带逐帧重演（固定步长确定性 → 轨迹/碰撞/得分一致）。

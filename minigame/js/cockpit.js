@@ -11,7 +11,17 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 })(typeof self !== 'undefined' ? self : this, function () {
   var D2R = Math.PI / 180;
 
-  function dark(color) { return new THREE.MeshLambertMaterial({ color: color || 0x24262b }); }
+  /* 内饰深色材质按色值缓存（每次构建座舱时 reset——材质随 rig dispose 释放，
+   * 不能跨车复用已释放实例；同一台车里 ~40 个内饰件原本每处各建一份同色材质，
+   * 收敛后全舱深色件仅按色值各留一份）。懒初始化：buildMirrors 可不经
+   * buildInterior 单独调用（mirror_audit 无头审计）。 */
+  var darkCache = null;
+  function darkReset() { darkCache = {}; }
+  function dark(color) {
+    var k = color || 0;
+    if (!darkCache) darkCache = {};
+    return darkCache[k] || (darkCache[k] = new THREE.MeshLambertMaterial({ color: color || 0x24262b }));
+  }
 
   /* ---- 7 寸液晶仪表（GR9 标志配置）：CanvasTexture 绘制齿位/车速，仅数值变化时重绘 ---- */
   var gaugeCanvas = null, gaugeCtx = null, gaugeTex = null, gaugeKmh = -1, gaugeGear = '';
@@ -72,6 +82,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
    *  - 7 寸液晶仪表立在中段台面上，8 寸悬浮中控屏居中，上方贯穿式出风口 + 银色饰条横贯；
    *  - A 柱收窄为风挡两角细饰柱（飞度以细 A 柱大视野著称），车顶前缘入画形成风挡上沿。 */
   function buildInterior(carGroup) {
+    darkReset();   // 每台车新缓存（见 dark 注释）
     var interior = new THREE.Group();
     var dm = dark(), dm2 = dark(0x32353c);
 
@@ -273,6 +284,42 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     wiperR.position.set(-0.27, 0.906, 1.32);
     wiperR.rotation.y = -12 * D2R;
     interior.add(wiperR);
+
+    /* ---- 静止内饰收编合并：构建完毕后把"纯色 Lambert、无贴图/自发光"的部件
+     * （仪表台三段/门板/出风口/饰条/表壳/屏框/吊臂/通道/护罩/拨杆/座椅/顶棚/
+     * 遮阳板/A 柱/cowl/雨刮…）拼成单 Mesh——主视图少 ~30 次 draw call 与同量
+     * 材质切换，镜面渲染隐藏内饰时随组整体显隐不受影响。
+     * 留在合并之外的：wheelGroup（随打轮转动，且车标/标线是自发光件、
+     * 几何参数被座舱自测断言）、lcd（贴图屏）、screenOff（Basic 不受光）。 */
+    var mergeSkip = function (n) {
+      if (!n.isMesh) return false;
+      var mats = Array.isArray(n.material) ? n.material : [n.material];
+      for (var i = 0; i < mats.length; i++) {
+        var m = mats[i];
+        if (!m.isMeshLambertMaterial || m.map) return true;
+        if (m.emissive && (m.emissive.r || m.emissive.g || m.emissive.b)) return true;
+      }
+      return false;
+    };
+    var subtreeMergeable = function (n) {
+      if (mergeSkip(n)) return false;
+      for (var i = 0; i < n.children.length; i++) {
+        if (!subtreeMergeable(n.children[i])) return false;
+      }
+      return true;
+    };
+    var st = new THREE.Group();
+    interior.children.slice().forEach(function (n) {
+      if (n !== wheelGroup && subtreeMergeable(n)) st.add(n);
+    });
+    if (st.children.length) {
+      if (PS.CarModel && PS.CarModel.mergeStatic) {
+        interior.add(PS.CarModel.mergeStatic(st));
+      } else {
+        /* 合并工具不在（独立加载 cockpit 的调试环境）：原样拆回，仅失去合并收益 */
+        while (st.children.length) interior.add(st.children[0]);
+      }
+    }
 
     carGroup.add(interior);
     return { wheelGroup: wheelGroup, interior: interior, updateGauges: updateGauges };

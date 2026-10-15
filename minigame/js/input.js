@@ -77,7 +77,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         return i;
       },
       tape: tape,
-      reset: function () { tape = []; }
+      /* 原地清空：api.tape 与闭包 tape 必须始终同一数组——重指新数组会让
+       * sample() 写新带、消费方（game._finish 读 api.tape）读旧带，复盘回放错局 */
+      reset: function () { tape.length = 0; }
     };
   }
 

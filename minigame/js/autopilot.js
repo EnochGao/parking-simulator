@@ -97,7 +97,15 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     while (guard-- > 0) {
       step(dt);                       // 推进脉冲状态（与规划器同一积分）
       var r = run.post(dt);           // 规则步（碰撞/评分/完成/失败——与游戏内同一实现）
-      if (record && record.length < 20000) record.push({ x: S.x, z: S.z, h: S.h });
+      /* 轨迹按 ≥3cm 位移降采样（线宽 0.12m 远粗于此）：静止等待/蠕行段不再逐帧堆点，
+       * 引导线渲染粒度与档位分段判定（assist 按 x/z/h 消费）不受影响；
+       * 路径按关卡常驻缓存（prefetchPaths 预取全部关卡），降采样显著削减驻留内存 */
+      if (record && record.length < 20000) {
+        var lp = record[record.length - 1];
+        if (!lp || (S.x - lp.x) * (S.x - lp.x) + (S.z - lp.z) * (S.z - lp.z) >= 9e-4) {
+          record.push({ x: S.x, z: S.z, h: S.h });
+        }
+      }
 
       if (r.counted && hits.length < 20) {
         hits.push({ t: run.time, x: S.x, z: S.z, obst: r.obDef.t, ox: r.obDef.x, oz: r.obDef.z });

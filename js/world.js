@@ -143,6 +143,13 @@
     // 停放车按颜色建一次模板、其余 clone（clone 共享几何体/材质实例，颜色仅 8 种）：
     // 同关多辆同色车不再各自新建并各自上传一份相同的几何体
     var parkedTpls = {};
+    /* 树/垃圾桶的几何与垃圾桶材质逐关各建一份、实例间共享（同关所有树的
+     * 树干/树冠几何完全相同——旧实现逐实例新建，反复上传显存） */
+    var trunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 1.6, 8);
+    var foliageGeo = new THREE.SphereGeometry(1.15, 10, 8);
+    var binGeo = new THREE.CylinderGeometry(0.36, 0.32, 1.0, 10);
+    var binM = new THREE.MeshLambertMaterial({ color: 0x3f5a3f });
+    disposables.push(trunkGeo, foliageGeo, binGeo, binM);
     level.obstacles.forEach(function (o, idx) {
       var a = (o.a || 0) * D2R;
       if (o.t === 'car') {
@@ -184,23 +191,19 @@
         group.add(pm);
         disposables.push(pm.geometry);
       } else if (o.t === 'tree') {
-        var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 1.6, 8), poleM);
+        var trunk = new THREE.Mesh(trunkGeo, poleM);
         trunk.position.set(o.x, 0.8, o.z);
         trunk.castShadow = true;
         group.add(trunk);
-        disposables.push(trunk.geometry);
-        var f1 = new THREE.Mesh(new THREE.SphereGeometry(1.15, 10, 8), grassM);
+        var f1 = new THREE.Mesh(foliageGeo, grassM);
         f1.position.set(o.x, 2.2, o.z);
         f1.castShadow = true;
         group.add(f1);
-        disposables.push(f1.geometry);
       } else if (o.t === 'bin') {
-        var d3 = PS.Levels.DIMS.bin;
-        var bm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.32, 1.0, 10), new THREE.MeshLambertMaterial({ color: 0x3f5a3f }));
+        var bm2 = new THREE.Mesh(binGeo, binM);
         bm2.position.set(o.x, 0.5, o.z);
         bm2.castShadow = true;
         group.add(bm2);
-        disposables.push(bm2.geometry, bm2.material);
       }
     });
 

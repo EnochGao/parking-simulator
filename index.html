@@ -20,37 +20,38 @@
       window.__errs.push('promise: ' + String(e.reason));
     });
   </script>
-  <script src="vendor/three.min.js"></script>
-  <script src="js/platform.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/physics.js"></script>
-  <script src="js/collision.js"></script>
-  <script src="js/scoring.js"></script>
-  <script src="js/pulse.js"></script>
-  <script src="js/sim.js"></script>
-  <script src="js/demo_paths.js"></script>
-  <script src="js/level_kit.js"></script>
-  <script src="js/levels/basic.js"></script>
-  <script src="js/levels/advanced.js"></script>
-    <script src="js/levels/challenge.js"></script>
-    <script src="js/levels/scenes.js"></script>
-    <script src="js/levels.js"></script>
-  <script src="js/autopilot.js"></script>
-  <script src="js/progress.js"></script>
-  <script src="js/input.js"></script>
-  <script src="js/textures.js"></script>
-  <script src="js/carModel.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/cockpit.js"></script>
-  <script src="js/mirror_check.js"></script>
-  <script src="js/cockpit_check.js"></script>
-  <script src="js/assist.js"></script>
-  <script src="js/hud.js"></script>
-  <script src="js/gamepad.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/carRig.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/main.js"></script>
+  <!-- 全部 defer：下载与解析并行、执行严格按序（UMD+PS 命名空间方案不受影响），
+       首屏可交互时间提前。自测专用模块（mirror_check/cockpit_check）不在此加载，
+       由 main.js 检测 ?mirrortest / ?cockpittest 时动态注入 -->
+  <script defer src="vendor/three.min.js"></script>
+  <script defer src="js/platform.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/physics.js"></script>
+  <script defer src="js/collision.js"></script>
+  <script defer src="js/scoring.js"></script>
+  <script defer src="js/pulse.js"></script>
+  <script defer src="js/sim.js"></script>
+  <script defer src="js/demo_paths.js"></script>
+  <script defer src="js/level_kit.js"></script>
+  <script defer src="js/levels/basic.js"></script>
+  <script defer src="js/levels/advanced.js"></script>
+  <script defer src="js/levels/challenge.js"></script>
+  <script defer src="js/levels/scenes.js"></script>
+  <script defer src="js/levels.js"></script>
+  <script defer src="js/autopilot.js"></script>
+  <script defer src="js/progress.js"></script>
+  <script defer src="js/input.js"></script>
+  <script defer src="js/textures.js"></script>
+  <script defer src="js/carModel.js"></script>
+  <script defer src="js/world.js"></script>
+  <script defer src="js/cockpit.js"></script>
+  <script defer src="js/assist.js"></script>
+  <script defer src="js/hud.js"></script>
+  <script defer src="js/gamepad.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/carRig.js"></script>
+  <script defer src="js/game.js"></script>
+  <script defer src="js/main.js"></script>
   <script>
     /* PWA 离线：注册 Service Worker（file:// 或不支持时静默跳过） */
     if (navigator.serviceWorker) {

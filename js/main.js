@@ -22,12 +22,21 @@
       setTimeout(function () { game.selftest(q.selftest); }, 100);
       return;
     }
+    /* 自测模块按需加载（正式玩家不再解析这两份代码，也不再进 SW 预缓存）：
+     * UMD 动态注入后即挂 PS.MirrorCheck / PS.CockpitCheck，与旧静态加载等价 */
+    function loadSelftest(src, run) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function () { run(); };
+      s.onerror = function () { document.title = 'SELFTEST LOAD FAIL: ' + src; };
+      document.head.appendChild(s);
+    }
     if (q.mirrortest) {
-      setTimeout(function () { game.selftestMirrors(); }, 100);
+      loadSelftest('js/mirror_check.js', function () { game.selftestMirrors(); });
       return;
     }
     if (q.cockpittest) {
-      setTimeout(function () { game.selftestCockpit(); }, 100);
+      loadSelftest('js/cockpit_check.js', function () { game.selftestCockpit(); });
       return;
     }
     if (q.autotest) {

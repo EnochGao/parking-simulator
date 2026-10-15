@@ -20,6 +20,41 @@
 
   function mat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
 
+  /* ---- 静态网格合并（mergeStatic）：把一棵对象树里的纯色 Mesh 拼成单 Mesh ----
+   * 供两类场景消费：停放车（~19 件 → 1 件，镜面/倒影多遍渲染同步受益）与
+   * 座舱静止内饰（~30 件 → 1 件）。材质颜色烘成顶点色，统一走一张
+   * vertexColors Lambert 材质——多遍渲染时材质切换也随之归一。
+   * 注意：只适合"静止且纯色 Lambert"的部件；贴图件/自发光件/动态件（如方向盘组、
+   * 液晶屏）必须留在合并树之外。 */
+  function mergeStatic(root) {
+    root.updateMatrixWorld(true);
+    var pos = [], nor = [], col = [], idx = [], off = 0;
+    var c = new THREE.Color();
+    root.traverse(function (n) {
+      if (!n.isMesh) return;
+      var m = Array.isArray(n.material) ? n.material[0] : n.material;
+      c.copy(m.color);
+      var g = n.geometry.clone().applyMatrix4(n.matrixWorld);
+      var p = g.attributes.position, nn = g.attributes.normal;
+      for (var i = 0; i < p.count; i++) {
+        pos.push(p.getX(i), p.getY(i), p.getZ(i));
+        nor.push(nn.getX(i), nn.getY(i), nn.getZ(i));
+        col.push(c.r, c.g, c.b);
+      }
+      var gi = g.index;
+      if (gi) { for (var j = 0; j < gi.count; j++) idx.push(gi.getX(j) + off); }
+      else { for (var j2 = 0; j2 < p.count; j2++) idx.push(j2 + off); }
+      off += p.count;
+      g.dispose();   // 克隆体只作变换中转，拷贝完即弃
+    });
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  }
+
   /** 车身主体：三段式车身 + 飞度式大座舱玻璃 + 车顶（两厢，短前悬长座舱）
    *  座舱段（z -0.35~0.70）地板下沉到 0.675 并铺深色内饰——低于方向盘轮缘最低点
    *  0.67，驾驶员俯视看到的是深色舱内地板；旧版座舱段与车头/车尾连成整块箱体，
@@ -41,9 +76,11 @@
     var tub = new THREE.Mesh(new THREE.BoxGeometry(W, 0.37, 1.05), bodyM);
     tub.position.set(0, 0.475, 0.175); tub.castShadow = true;
     g.add(tub);
-    // 深色舱内地板：顶面 0.675，高于舱体顶面 0.66（完全遮盖车漆色台面）、
+    // 深色舱内件共用一份材质（舱内地板 + 两条窗沿盖板——旧实现 3 处各建一份）。
+    // 舱内地板：顶面 0.675，高于舱体顶面 0.66（完全遮盖车漆色台面）、
     // 低于方向盘轮缘最低点 0.682（轮盘完整可见）
-    var tubFloor = new THREE.Mesh(new THREE.BoxGeometry(1.69, 0.02, 1.04), mat(0x24262b));
+    var darkM = mat(0x24262b);
+    var tubFloor = new THREE.Mesh(new THREE.BoxGeometry(1.69, 0.02, 1.04), darkM);
     tubFloor.position.set(0, 0.665, 0.175);
     g.add(tubFloor);
     // 门框条：补齐座舱段两侧 0.66~0.89 的外板。内缘 0.647 与内饰门板（0.645~0.845）
@@ -54,7 +91,7 @@
       var strip = new THREE.Mesh(stripG, bodyM);
       strip.position.set(sx, 0.775, 0.175); strip.castShadow = true;
       g.add(strip);
-      var cap = new THREE.Mesh(capG, mat(0x24262b));
+      var cap = new THREE.Mesh(capG, darkM);
       cap.position.set(sx, 0.896, 0.175);
       g.add(cap);
     });
@@ -90,7 +127,10 @@
     });
   }
 
-  /** 构建静止停放车辆（供场景摆放） */
+  /** 构建静止停放车辆（供场景摆放）。
+   *  部件拼装与玩家车同一套函数（几何数值单源），随后整体合并为单 Mesh——
+   *  静止刚体无需逐件绘制：一辆车 1 次 draw call（主视图 + 镜面/倒影多遍渲染
+   *  同步受益），部件升级只改 buildBody/buildWheels 一处，合并层自动跟随。 */
   function buildParkedCar(color, seed) {
     var g = new THREE.Group();
     color = color != null ? color : COLORS[(seed || 0) % COLORS.length];
@@ -107,7 +147,10 @@
     var tl = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.06), new THREE.MeshLambertMaterial({ color: 0xb33a2f }));
     tl.position.set(-0.60, 0.75, -L / 2 - 0.01); g.add(tl);
     var tr = tl.clone(); tr.position.x = 0.60; g.add(tr);
-    return g;
+
+    var merged = mergeStatic(g);
+    merged.castShadow = true;   // 车身件原集体投影，合并后整 Mesh 等效（轮/灯投影在车底阴影内不可辨）
+    return merged;
   }
 
   /**
@@ -155,5 +198,5 @@
     };
   }
 
-  return { buildParkedCar: buildParkedCar, buildPlayerCar: buildPlayerCar, COLORS: COLORS };
+  return { buildParkedCar: buildParkedCar, buildPlayerCar: buildPlayerCar, mergeStatic: mergeStatic, COLORS: COLORS };
 });

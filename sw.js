@@ -3,7 +3,7 @@
  * 导航请求离线兜底 index.html。发版改 CACHE 版本号（旧缓存 activate 时清理）。
  * 注意：ASSETS 与 index.html 引用保持一致——tests/run_all.js 有一致性校验。 */
 'use strict';
-var CACHE = 'parkmaster-v1.6.5';
+var CACHE = 'parkmaster-v1.6.6';
 var ASSETS = [
   './',
   './index.html',
@@ -33,8 +33,8 @@ var ASSETS = [
   './js/carModel.js',
   './js/world.js',
   './js/cockpit.js',
-  './js/mirror_check.js',
-  './js/cockpit_check.js',
+  /* mirror_check/cockpit_check 为 ?mirrortest/?cockpittest 自测专用，main.js 动态
+   * 注入加载（在线时可用），不再常驻预缓存——正式玩家少下两份代码 */
   './js/assist.js',
   './js/hud.js',
   './js/gamepad.js',

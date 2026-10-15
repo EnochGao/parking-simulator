@@ -68,7 +68,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
        * pixelRatio 与阴影贴图直接设到渲染器，RT 尺寸写回本节单值（cockpit 读 PS.QUALITY）。
        * 镜面/倒影 RT 与桌面档同尺寸（真机像素比 bug 修复后整体偏糊的跟进修），帧率吃紧先降 pixelRatioMax */
       touch: {
-        pixelRatioMax: 2,
+        pixelRatioMax: 2,        /* wx 小游戏端：真机 GL 合成器偏糊的回调，勿降 */
+        pixelRatioMaxWeb: 1.5,   /* 网页触屏端：与桌面档一致——手机 dpr 2~3 的全屏填充率是最弱 GPU 的主要预算 */
         shadowSize: 1024,
         mirrorRtW: 384,
         revRtW: 320, revRtH: 180

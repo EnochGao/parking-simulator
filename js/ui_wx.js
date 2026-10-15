@@ -705,7 +705,7 @@
     }
   }
 
-  /** 模拟量方向盘（v2 规划项）：轮缘 + 三辐条随拖动旋转，±135°=满打，双击回正 */
+  /** 模拟量方向盘：轮缘 + 三辐条随拖动旋转，±135°=满打，双击回正 */
   function drawWheel(ctx, b) {
     var cx = b.x + b.w / 2, cy = b.y + b.h / 2, r = b.w / 2;
     var active = Math.abs(b.angle) > 2;

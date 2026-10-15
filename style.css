@@ -103,7 +103,7 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
 .tc-btn.drive:active { background: rgba(111,214,111,.5); border-color: #6fd66f90; }
 .tc-btn.fn { width: 46px; height: 46px; font-size: 15px; }
 .tc-btn.fn.on { background: rgba(111,214,111,.4); border-color: #6fd66f; color: #c9f2cf; }
-/* 模拟量方向盘（v2：替换 ◀▶ 转向键）。轮缘+辐条纯 CSS，拖动旋转 ±270°=满打。
+/* 模拟量方向盘（替换 ◀▶ 转向键）。轮缘+辐条纯 CSS，拖动旋转 ±270°=满打。
  * 双幅式辐条 + 宽幅胶囊轮毂 + 12 点黄色回正标线——与座舱 3D 方向盘（飞度 GR9
  * 双幅式）同款，无 T 型下辐条 */
 .tc-wheel { position: absolute; pointer-events: auto; touch-action: none; user-select: none;
@@ -120,6 +120,9 @@ body.touch-mode .btn, body.touch-mode .level-card { touch-action: manipulation; 
   background: #ffd23f; border-radius: 2px; }
 .tc-wheel-face b { position: absolute; left: 33%; top: 41%; width: 34%; height: 18%;
   border-radius: 999px; background: #6fd66fd0; }
+/* 触屏端去 backdrop-filter：合成器每帧都要对背后 canvas 采样+模糊，弱 GPU 上与
+ * WebGL 抢预算；半透明底色（.55/.5）的可读性已足够 */
+body.touch-mode .tc-btn, body.touch-mode .tc-wheel-face { backdrop-filter: none; }
 .tc-wheel small { position: absolute; left: -10px; right: -10px; bottom: -19px; text-align: center;
   font-size: 10px; font-weight: 400; color: rgba(232,234,238,.65); pointer-events: none; }
 /* 右下油门-倒车-手刹（倒车在最外——泊车主操作）；env() 为刘海屏安全区 */
