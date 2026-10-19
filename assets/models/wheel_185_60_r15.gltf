@@ -1,0 +1,291 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "ParkMaster tools/gen_models.js",
+    "copyright": "ParkMaster · 程序化生成，可自由用于本项目"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "wheel_185_60_r15",
+      "nodes": [
+        3
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Tire",
+      "mesh": 0
+    },
+    {
+      "name": "Rim",
+      "mesh": 1
+    },
+    {
+      "name": "BrakeDisc",
+      "mesh": 2
+    },
+    {
+      "name": "wheel_185_60_r15",
+      "children": [
+        0,
+        1,
+        2
+      ],
+      "extras": {
+        "label": "轮组 185/60 R15（轮胎 + 轮辋 + 刹车盘）",
+        "unit": "meter",
+        "upAxis": "+Y",
+        "forwardAxis": "+Z",
+        "origin": "轮心（轴向 = X）",
+        "tireRadius": 0.3015,
+        "tireWidth": 0.185,
+        "rim": "Rim",
+        "note": "滚动时绕局部 X 轴旋转：角速度 = 车速 / 轮胎半径"
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Tire",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "material": 0,
+          "extras": {
+            "name": "Tire"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rim",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 3,
+            "NORMAL": 4
+          },
+          "indices": 5,
+          "material": 1,
+          "extras": {
+            "name": "Rim"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BrakeDisc",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 6,
+            "NORMAL": 7
+          },
+          "indices": 8,
+          "material": 2,
+          "extras": {
+            "name": "BrakeDisc"
+          }
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "Tire",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.007499032043226175,
+          0.008568125618069307,
+          0.010329823029626936,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.94
+      }
+    },
+    {
+      "name": "Rim",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.467783796112159,
+          0.5088813208549338,
+          0.5711248294648731,
+          1
+        ],
+        "metallicFactor": 0.95,
+        "roughnessFactor": 0.26
+      }
+    },
+    {
+      "name": "BrakeDisc",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15292615199615017,
+          0.1714411007328226,
+          0.19806931955994886,
+          1
+        ],
+        "metallicFactor": 0.85,
+        "roughnessFactor": 0.48
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 180,
+      "type": "VEC3",
+      "min": [
+        -0.0925000011920929,
+        -0.30149999260902405,
+        -0.2969195246696472
+      ],
+      "max": [
+        0.0925000011920929,
+        0.30149999260902405,
+        0.2969195246696472
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 180,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 864,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 243,
+      "type": "VEC3",
+      "min": [
+        0.057349998503923416,
+        -0.19537200033664703,
+        -0.1924038529396057
+      ],
+      "max": [
+        0.08515000343322754,
+        0.19537200033664703,
+        0.1924038529396057
+      ]
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 243,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5123,
+      "count": 654,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 90,
+      "type": "VEC3",
+      "min": [
+        -0.03962500020861626,
+        -0.15074999630451202,
+        -0.15074999630451202
+      ],
+      "max": [
+        0.030375000089406967,
+        0.1554500013589859,
+        0.15074999630451202
+      ]
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 90,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5123,
+      "count": 228,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 2160,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2160,
+      "byteLength": 2160,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 4320,
+      "byteLength": 1728,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 6048,
+      "byteLength": 2916,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 8964,
+      "byteLength": 2916,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 11880,
+      "byteLength": 1308,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 13188,
+      "byteLength": 1080,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 14268,
+      "byteLength": 1080,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 15348,
+      "byteLength": 456,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "wheel_185_60_r15.bin",
+      "byteLength": 15804
+    }
+  ]
+}

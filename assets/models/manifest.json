@@ -1,0 +1,224 @@
+{
+  "generatedBy": "tools/gen_models.js",
+  "generatorNote": "程序化生成，改型号/尺寸请改工具内 STYLES 后重跑（npm run build:models -- --check）",
+  "format": "glTF 2.0（GLB 为单文件打包，.gltf + .bin 为同内容分体版）",
+  "units": "meter",
+  "upAxis": "+Y",
+  "forwardAxis": "+Z",
+  "origin": "车辆中心地面投影（y=0 为地面）",
+  "conventions": {
+    "paintMaterial": "Paint（整车漆面/后视镜壳，运行时改颜色即可出多色停放车）",
+    "glassMaterial": "Glass",
+    "wheels": "Wheel_FL / Wheel_FR / Wheel_RL / Wheel_RR 节点原点在轮心，绕局部 X 轴滚动",
+    "steering": "WheelSteer_FL / WheelSteer_FR 为前轮转向枢轴，绕局部 Y 轴旋转（阿克曼内外轮差由上层逻辑给）",
+    "mirrors": "Mirror_L / Mirror_R 为后视镜枢轴，绕局部 Y 轴调角",
+    "lamps": "HeadLamp / TailLamp / Indicator 为自发光材质，Indicator_L/R 为独立节点（转向灯闪烁）"
+  },
+  "models": [
+    {
+      "file": "car_gr9.glb",
+      "gltf": "car_gr9.gltf",
+      "bin": "car_gr9.bin",
+      "label": "本田飞度 GR9 两厢（玩家车同款尺寸）",
+      "style": "hatch",
+      "dimensions": {
+        "length": 4.109,
+        "width": 1.694,
+        "height": 1.537
+      },
+      "wheelbase": 2.53,
+      "tireRadius": 0.3015,
+      "driverEye": {
+        "x": 0.359,
+        "y": 1.191,
+        "z": -0.02
+      },
+      "materials": [
+        "Paint",
+        "Glass",
+        "Trim",
+        "Chrome",
+        "HeadLamp",
+        "TailLamp",
+        "Indicator",
+        "Tire",
+        "Rim",
+        "BrakeDisc",
+        "MirrorGlass",
+        "Plate",
+        "Cabin",
+        "Fabric",
+        "Carpet",
+        "Screen",
+        "Leather"
+      ],
+      "nodes": {
+        "root": "car_gr9",
+        "wheels": [
+          "WheelSteer_FL",
+          "WheelSteer_FR",
+          "Wheel_RL",
+          "Wheel_RR"
+        ],
+        "mirrors": [
+          "Mirror_L",
+          "Mirror_R"
+        ]
+      },
+      "triangles": 7466,
+      "bytes": 378900,
+      "bbox": {
+        "min": [
+          -0.971,
+          0,
+          -2.075
+        ],
+        "max": [
+          0.971,
+          1.568,
+          2.072
+        ]
+      }
+    },
+    {
+      "file": "car_sedan.glb",
+      "gltf": "car_sedan.gltf",
+      "bin": "car_sedan.bin",
+      "label": "紧凑型三厢轿车（场景停放车）",
+      "style": "sedan",
+      "dimensions": {
+        "length": 4.62,
+        "width": 1.78,
+        "height": 1.455
+      },
+      "wheelbase": 2.7,
+      "tireRadius": 0.312,
+      "driverEye": {
+        "x": 0.377,
+        "y": 1.128,
+        "z": -0.02
+      },
+      "materials": [
+        "Paint",
+        "Glass",
+        "Trim",
+        "Chrome",
+        "HeadLamp",
+        "TailLamp",
+        "Indicator",
+        "Tire",
+        "Rim",
+        "BrakeDisc",
+        "MirrorGlass",
+        "Plate",
+        "Cabin",
+        "Fabric",
+        "Carpet",
+        "Screen",
+        "Leather"
+      ],
+      "nodes": {
+        "root": "car_sedan",
+        "wheels": [
+          "WheelSteer_FL",
+          "WheelSteer_FR",
+          "Wheel_RL",
+          "Wheel_RR"
+        ],
+        "mirrors": [
+          "Mirror_L",
+          "Mirror_R"
+        ]
+      },
+      "triangles": 7556,
+      "bytes": 380080,
+      "bbox": {
+        "min": [
+          -1.014,
+          0,
+          -2.33
+        ],
+        "max": [
+          1.014,
+          1.492,
+          2.328
+        ]
+      }
+    },
+    {
+      "file": "car_suv.glb",
+      "gltf": "car_suv.gltf",
+      "bin": "car_suv.bin",
+      "label": "紧凑型 SUV（场景停放车）",
+      "style": "suv",
+      "dimensions": {
+        "length": 4.45,
+        "width": 1.85,
+        "height": 1.66
+      },
+      "wheelbase": 2.66,
+      "tireRadius": 0.345,
+      "driverEye": {
+        "x": 0.392,
+        "y": 1.287,
+        "z": -0.02
+      },
+      "materials": [
+        "Paint",
+        "Glass",
+        "Trim",
+        "Chrome",
+        "HeadLamp",
+        "TailLamp",
+        "Indicator",
+        "Tire",
+        "Rim",
+        "BrakeDisc",
+        "MirrorGlass",
+        "Plate",
+        "Cabin",
+        "Fabric",
+        "Carpet",
+        "Screen",
+        "Leather"
+      ],
+      "nodes": {
+        "root": "car_suv",
+        "wheels": [
+          "WheelSteer_FL",
+          "WheelSteer_FR",
+          "Wheel_RL",
+          "Wheel_RR"
+        ],
+        "mirrors": [
+          "Mirror_L",
+          "Mirror_R"
+        ]
+      },
+      "triangles": 7566,
+      "bytes": 383332,
+      "bbox": {
+        "min": [
+          -1.049,
+          0,
+          -2.245
+        ],
+        "max": [
+          1.049,
+          1.7,
+          2.243
+        ]
+      }
+    },
+    {
+      "file": "wheel_185_60_r15.glb",
+      "gltf": "wheel_185_60_r15.gltf",
+      "bin": "wheel_185_60_r15.bin",
+      "label": "轮组 185/60 R15",
+      "style": "wheel",
+      "tireRadius": 0.3015,
+      "bytes": 19044,
+      "triangles": 582
+    }
+  ]
+}

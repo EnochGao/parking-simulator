@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23ffb300'/><text x='16' y='23' font-size='18' text-anchor='middle' fill='%23101318' font-family='sans-serif'>P</text></svg>">
+<title>ParkMaster · 车辆模型查看器</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: rgba(20, 24, 30, 0.86);
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #e8edf3;
+    --muted: #8b97a5;
+    --accent: #ffb300;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(120% 80% at 50% 0%, #1b222b 0%, var(--bg) 62%);
+    color: var(--text);
+    font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; }
+
+  .panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    width: 274px;
+    max-height: calc(100% - 32px);
+    overflow: auto;
+    padding: 14px 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .brand b { font-size: 15px; letter-spacing: 0.2px; }
+  .brand span { color: var(--muted); font-size: 11px; }
+  .sub { color: var(--muted); font-size: 11px; margin-bottom: 14px; }
+
+  .group { margin-top: 14px; }
+  .group > label {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+  }
+  select {
+    width: 100%;
+    padding: 8px 10px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font: inherit;
+    outline: none;
+  }
+  select:focus { border-color: rgba(255, 179, 0, 0.55); }
+
+  .swatches { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+  .swatch {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .swatch:hover { transform: translateY(-1px); }
+  .swatch.on { box-shadow: 0 0 0 2px var(--accent); }
+
+  .row { display: flex; gap: 6px; }
+  .row button { width: 100%; }
+
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toggles button, .row button {
+    padding: 7px 10px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .toggles button:hover, .row button:hover { background: rgba(255, 255, 255, 0.12); }
+  .toggles button.on { background: rgba(255, 179, 0, 0.16); border-color: rgba(255, 179, 0, 0.55); color: #ffd980; }
+  .toggles button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .toggles button:disabled:hover { background: rgba(255, 255, 255, 0.06); }
+
+  .meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+  .meta b { color: var(--text); font-weight: 600; }
+  .meta div { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+
+  #hint {
+    position: fixed;
+    right: 18px;
+    bottom: 14px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: right;
+    pointer-events: none;
+  }
+  #state {
+    position: fixed;
+    left: 50%;
+    top: 20px;
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(120, 20, 20, 0.86);
+    border: 1px solid rgba(255, 120, 120, 0.35);
+    font-size: 12px;
+    display: none;
+  }
+  #loading {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(10, 13, 17, 0.72);
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    transition: opacity 0.25s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="panel">
+  <div class="brand"><b>ParkMaster</b><span>车辆模型查看器</span></div>
+  <div class="sub">glTF 2.0 · 1 单位 = 1 米 · +Z 车头</div>
+
+  <div class="group">
+    <label for="model">车型</label>
+    <select id="model" aria-label="车型"></select>
+  </div>
+
+  <div class="group">
+    <label>本地检视</label>
+    <div class="row">
+      <button id="btnOpen">打开本地 GLB…</button>
+    </div>
+    <input id="fileInput" type="file" accept=".glb,model/gltf-binary" hidden>
+  </div>
+
+  <div class="group">
+    <label for="format">文件格式</label>
+    <select id="format" aria-label="文件格式">
+      <option value="glb">GLB · 单文件（推荐）</option>
+      <option value="gltf">glTF + .bin · 分体</option>
+    </select>
+  </div>
+
+  <div class="group">
+    <label>车漆（Paint 材质）</label>
+    <div class="swatches" id="swatches" role="group" aria-label="车漆颜色"></div>
+  </div>
+
+  <div class="group">
+    <label>显示</label>
+    <div class="toggles">
+      <button id="btnInside">车内视角</button>
+      <button id="btnWire">线框</button>
+      <button id="btnSpin" class="on">车轮滚动</button>
+      <button id="btnSteer" class="on">前轮转向</button>
+      <button id="btnOrbit" class="on">自动环绕</button>
+      <button id="btnReset">重置视角</button>
+    </div>
+  </div>
+
+  <div class="meta" id="meta"></div>
+</div>
+
+<div id="hint">拖拽旋转 · 滚轮缩放 · 双击复位</div>
+<div id="state"></div>
+<div id="loading">MODEL LOADING</div>
+
+<script src="../../vendor/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------ *
+   * 迷你 glTF 2.0 载入器：只覆盖本工具产出的子集（float/uint 顶点、
+   * 三角索引、TRS 节点、PBR 材质），无需 three/examples 的 GLTFLoader，
+   * 保证查看器与游戏本体一样零外部依赖。
+   * ------------------------------------------------------------------ */
+
+  function parseGLB(arrayBuffer) {
+    var dv = new DataView(arrayBuffer);
+    if (dv.getUint32(0, true) !== 0x46546C67) throw new Error('不是 GLB 文件');
+    var total = dv.getUint32(8, true);
+    var off = 12, json = null, bin = null;
+    while (off < total) {
+      var len = dv.getUint32(off, true);
+      var type = dv.getUint32(off + 4, true);
+      if (type === 0x4E4F534A) {
+        json = JSON.parse(new TextDecoder().decode(new Uint8Array(arrayBuffer, off + 8, len)));
+      } else if (type === 0x004E4942) {
+        bin = new Uint8Array(arrayBuffer, off + 8, len).slice();
+      }
+      off += 8 + len;
+    }
+    if (!json) throw new Error('GLB 缺少 JSON chunk');
+    return { gl: json, bin: bin };
+  }
+
+  var COMP = {
+    5120: { T: Int8Array, size: 1 },
+    5121: { T: Uint8Array, size: 1 },
+    5122: { T: Int16Array, size: 2 },
+    5123: { T: Uint16Array, size: 2 },
+    5125: { T: Uint32Array, size: 4 },
+    5126: { T: Float32Array, size: 4 }
+  };
+  var NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+
+  function reader(gl, bin) {
+    function accessor(ai) {
+      var a = gl.accessors[ai];
+      var bv = gl.bufferViews[a.bufferView];
+      var comp = COMP[a.componentType];
+      var n = NC[a.type];
+      var start = (bv.byteOffset || 0) + (a.byteOffset || 0);
+      var stride = bv.byteStride || comp.size * n;
+      if (stride === comp.size * n) {
+        return new comp.T(bin.buffer, bin.byteOffset + start, a.count * n);
+      }
+      var out = new comp.T(a.count * n);
+      var dv = new DataView(bin.buffer, bin.byteOffset);
+      for (var i = 0; i < a.count; i++) {
+        for (var c = 0; c < n; c++) {
+          var o = start + i * stride + c * comp.size;
+          out[i * n + c] = a.componentType === 5126 ? dv.getFloat32(o, true)
+            : (a.componentType === 5123 ? dv.getUint16(o, true) : dv.getUint32(o, true));
+        }
+      }
+      return out;
+    }
+    return accessor;
+  }
+
+  function buildScene(gl, bin) {
+    var read = reader(gl, bin);
+    var matCache = {};
+    var matsByName = {};
+    var texCache = {};
+
+    function texture(ti) {
+      if (texCache[ti]) return texCache[ti];
+      var t = gl.textures[ti];
+      var img = gl.images[t.source];
+      var bv = gl.bufferViews[img.bufferView];
+      var bytes = bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength);
+      var url = URL.createObjectURL(new Blob([bytes], { type: img.mimeType || 'image/png' }));
+      var tex = new THREE.TextureLoader().load(url, function () { URL.revokeObjectURL(url); });
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 4;
+      tex.encoding = THREE.sRGBEncoding;
+      texCache[ti] = tex;
+      return tex;
+    }
+
+    function material(mi) {
+      if (matCache[mi]) return matCache[mi];
+      var md = (gl.materials && gl.materials[mi]) || {};
+      var p = md.pbrMetallicRoughness || {};
+      var bc = p.baseColorFactor || [1, 1, 1, 1];
+      var mat = new THREE.MeshStandardMaterial();
+      mat.name = md.name || ('mat' + mi);
+      mat.color.setRGB(bc[0], bc[1], bc[2]);
+      mat.metalness = p.metallicFactor != null ? p.metallicFactor : 1;
+      mat.roughness = p.roughnessFactor != null ? p.roughnessFactor : 1;
+      if (md.emissiveFactor) {
+        mat.emissive.setRGB(md.emissiveFactor[0], md.emissiveFactor[1], md.emissiveFactor[2]);
+      }
+      if (md.alphaMode === 'BLEND') {
+        mat.transparent = true;
+        mat.opacity = bc[3] != null ? bc[3] : 1;
+        mat.depthWrite = mat.opacity > 0.98;
+      }
+      mat.side = md.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+      if (p.baseColorTexture) {
+        mat.map = texture(p.baseColorTexture.index);
+        mat.map.repeat.set(1, 1);
+      }
+      matCache[mi] = mat;
+      matsByName[mat.name] = mat;
+      return mat;
+    }
+
+    function node(ni) {
+      var nd = gl.nodes[ni];
+      var g = new THREE.Group();
+      g.name = nd.name || '';
+      if (nd.translation) g.position.fromArray(nd.translation);
+      if (nd.rotation) g.quaternion.fromArray(nd.rotation);
+      if (nd.scale) g.scale.fromArray(nd.scale);
+      if (nd.mesh != null) {
+        var mesh = gl.meshes[nd.mesh];
+        mesh.primitives.forEach(function (prim, pi) {
+          var geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(read(prim.attributes.POSITION), 3));
+          if (prim.attributes.NORMAL != null) {
+            geo.setAttribute('normal', new THREE.BufferAttribute(read(prim.attributes.NORMAL), 3));
+          }
+          if (prim.attributes.TEXCOORD_0 != null) {
+            geo.setAttribute('uv', new THREE.BufferAttribute(read(prim.attributes.TEXCOORD_0), 2));
+          }
+          if (prim.indices != null) {
+            geo.setIndex(new THREE.BufferAttribute(read(prim.indices), 1));
+          }
+          if (!prim.attributes.NORMAL) geo.computeVertexNormals();
+          var mat = material(prim.material);
+          var m = new THREE.Mesh(geo, mat);
+          m.name = (mesh.name || 'mesh') + '#' + pi;
+          // 玻璃不投影：否则整块前风挡会在引擎盖/座舱里压出一片死黑
+          m.castShadow = !mat.transparent;
+          m.receiveShadow = true;
+          g.add(m);
+        });
+      }
+      (nd.children || []).forEach(function (c) { g.add(node(c)); });
+      return g;
+    }
+
+    var root = new THREE.Group();
+    root.name = 'gltf-root';
+    (gl.scenes[gl.scene || 0].nodes || []).forEach(function (ni) { root.add(node(ni)); });
+    return { root: root, materials: matsByName };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 场景
+   * ------------------------------------------------------------------ */
+
+  var stage = document.getElementById('stage');
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.06;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xb9c9d8, 22, 70);
+
+  // 天空：竖直渐变的球壳（白天环境，车内视角才有"外面"的感觉）
+  var skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 8; skyCanvas.height = 128;
+  var sctx = skyCanvas.getContext('2d');
+  var grad = sctx.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#5b86b8');
+  grad.addColorStop(0.55, '#a8c2d8');
+  grad.addColorStop(0.78, '#cdd8e0');
+  grad.addColorStop(1, '#9aa4ac');
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, 8, 128);
+  var skyTex = new THREE.CanvasTexture(skyCanvas);
+  skyTex.encoding = THREE.sRGBEncoding;
+  var sky = new THREE.Mesh(
+    new THREE.SphereGeometry(90, 32, 20),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false, fog: false })
+  );
+  scene.add(sky);
+  scene.background = new THREE.Color(0xb9c9d8);
+
+  var camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.05, 220);
+
+  // 环境反射（程序化 PMREM，金属漆面才有东西可反射）
+  var pmrem = new THREE.PMREMGenerator(renderer);
+  var envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(30, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xa9c2d8, side: THREE.BackSide })
+  ));
+  // 下半球压暗，金属件才有"上亮下暗"的真实反射
+  envScene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(29, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x3e444b, side: THREE.BackSide })
+  ));
+  [[0, 14, 0, 12], [10, 8, 6, 6], [-11, 6, -7, 5]].forEach(function (b) {
+    var box = new THREE.Mesh(
+      new THREE.BoxGeometry(b[3], b[3], b[3]),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    box.position.set(b[0], b[1], b[2]);
+    envScene.add(box);
+  });
+  scene.environment = pmrem.fromScene(envScene, 0.02).texture;
+
+  var hemi = new THREE.HemisphereLight(0xd6e6f5, 0x59616a, 0.95);
+  scene.add(hemi);
+
+  var key = new THREE.DirectionalLight(0xfff6e8, 2.9);
+  key.position.set(5.5, 8.5, 6.5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 30;
+  key.shadow.camera.left = -6;
+  key.shadow.camera.right = 6;
+  key.shadow.camera.top = 6;
+  key.shadow.camera.bottom = -6;
+  key.shadow.bias = -0.0008;
+  key.shadow.normalBias = 0.02;
+  scene.add(key);
+
+  var fill = new THREE.DirectionalLight(0xbfd8ff, 0.45);
+  fill.position.set(-7, 4, -6);
+  scene.add(fill);
+
+  var ground = new THREE.Mesh(
+    new THREE.CircleGeometry(60, 64),
+    new THREE.MeshStandardMaterial({ color: 0x71777e, roughness: 0.95, metalness: 0.02 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var grid = new THREE.GridHelper(60, 60, 0x565c63, 0x646a71);
+  grid.position.y = 0.002;
+  grid.material.transparent = true;
+  grid.material.opacity = 0.35;
+  scene.add(grid);
+
+  var shadowCatcher = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 14),
+    new THREE.ShadowMaterial({ color: 0x1a2028, opacity: 0.34 })
+  );
+  shadowCatcher.rotation.x = -Math.PI / 2;
+  shadowCatcher.position.y = 0.004;
+  shadowCatcher.receiveShadow = true;
+  scene.add(shadowCatcher);
+
+  /* ------------------------------------------------------------------ *
+   * 轨道相机
+   * ------------------------------------------------------------------ */
+
+  var orbit = { theta: 0.72, phi: 1.16, dist: 7.4, target: new THREE.Vector3(0, 0.72, 0) };
+  var modelCenter = new THREE.Vector3(0, 0.72, 0);
+  var autoOrbit = true;
+  var dragging = false;
+  var lastPointer = null;
+
+  // 车内视角：相机放在驾驶位眼点，拖拽 = 转头，滚轮 = 视野
+  var inside = false;
+  var eye = new THREE.Vector3(0.36, 1.18, 0.10);
+  var look = { yaw: 0, pitch: -0.05 };
+
+  function applyCamera() {
+    if (inside) {
+      camera.fov = 72;
+      camera.position.copy(eye);
+      var cp2 = Math.cos(look.pitch);
+      camera.lookAt(
+        eye.x + Math.sin(look.yaw) * cp2,
+        eye.y + Math.sin(look.pitch),
+        eye.z + Math.cos(look.yaw) * cp2
+      );
+      camera.updateProjectionMatrix();
+      return;
+    }
+    camera.fov = 42;
+    camera.updateProjectionMatrix();
+    var sp = Math.sin(orbit.phi), cp = Math.cos(orbit.phi);
+    camera.position.set(
+      orbit.target.x + orbit.dist * sp * Math.sin(orbit.theta),
+      orbit.target.y + orbit.dist * cp,
+      orbit.target.z + orbit.dist * sp * Math.cos(orbit.theta)
+    );
+    camera.lookAt(orbit.target);
+  }
+
+  renderer.domElement.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    lastPointer = { x: e.clientX, y: e.clientY };
+    renderer.domElement.setPointerCapture(e.pointerId);
+  });
+  renderer.domElement.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var dx = e.clientX - lastPointer.x;
+    var dy = e.clientY - lastPointer.y;
+    lastPointer = { x: e.clientX, y: e.clientY };
+    if (inside) {
+      look.yaw = Math.max(-1.5, Math.min(1.5, look.yaw - dx * 0.004));
+      look.pitch = Math.max(-0.55, Math.min(0.45, look.pitch - dy * 0.004));
+    } else {
+      orbit.theta -= dx * 0.007;
+      orbit.phi = Math.max(0.16, Math.min(1.52, orbit.phi - dy * 0.006));
+    }
+    applyCamera();
+  });
+  function endDrag() { dragging = false; }
+  renderer.domElement.addEventListener('pointerup', endDrag);
+  renderer.domElement.addEventListener('pointercancel', endDrag);
+  renderer.domElement.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    if (inside) {
+      camera.fov = Math.max(36, Math.min(84, camera.fov + e.deltaY * 0.02));
+      camera.updateProjectionMatrix();
+    } else {
+      orbit.dist = Math.max(2.6, Math.min(18, orbit.dist * Math.exp(e.deltaY * 0.0012)));
+      applyCamera();
+    }
+  }, { passive: false });
+  renderer.domElement.addEventListener('dblclick', resetView);
+
+  function resetView() {
+    if (inside) {
+      look.yaw = 0;
+      look.pitch = -0.05;
+      applyCamera();
+      return;
+    }
+    orbit.theta = 0.72;
+    orbit.phi = 1.16;
+    orbit.dist = 7.4;
+    orbit.target.copy(modelCenter);
+    applyCamera();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 模型加载 / 交互
+   * ------------------------------------------------------------------ */
+
+  var paintMats = [];
+  var current = null;
+  var wheelNodes = [];
+  var steerNodes = [];
+  var spin = true;
+  var steer = true;
+  var wire = false;
+  var spinAngle = 0;
+  var steerAngle = 0;
+  var useGltf = false;
+  var metaEl = document.getElementById('meta');
+  var stateEl = document.getElementById('state');
+  var loadingEl = document.getElementById('loading');
+
+  function showError(msg) {
+    stateEl.style.display = 'block';
+    stateEl.textContent = msg;
+  }
+
+  async function fetchAsset(entry, useGltf) {
+    if (!useGltf) {
+      var res = await fetch(entry.file);
+      if (!res.ok) throw new Error(entry.file + ' 载入失败');
+      return parseGLB(await res.arrayBuffer());
+    }
+    var gz = await fetch(entry.gltf);
+    if (!gz.ok) throw new Error(entry.gltf + ' 载入失败');
+    var gl = await gz.json();
+    var binBuf = await (await fetch(entry.bin)).arrayBuffer();
+    return { gl: gl, bin: new Uint8Array(binBuf) };
+  }
+
+  function disposeCurrent() {
+    if (!current) return;
+    scene.remove(current.root);
+    current.root.traverse(function (o) { if (o.geometry) o.geometry.dispose(); });
+    current.materials && Object.keys(current.materials).forEach(function (k) {
+      current.materials[k].dispose();
+    });
+  }
+
+  /** 挂载一台车：清旧、定位、取景、登记可动节点、写信息面板 */
+  function mountModel(built, info) {
+    disposeCurrent();
+    // 独立轮组以轮心为原点，查看器里抬到地面上，避免半埋进地里
+    if (info.style === 'wheel') built.root.position.y = info.tireRadius || 0.3;
+    current = built;
+    scene.add(built.root);
+
+    var box = new THREE.Box3().setFromObject(built.root);
+    var size = box.getSize(new THREE.Vector3());
+    modelCenter.copy(box.getCenter(new THREE.Vector3()));
+    orbit.target.copy(modelCenter);
+    orbit.dist = Math.max(4.4, Math.max(size.x, size.z) * 1.45);
+
+    // 驾驶位眼点：manifest 自带优先，导入模型按尺寸估算
+    var de = info.driverEye;
+    if (!de && info.style !== 'wheel') {
+      de = { x: size.x * 0.212, y: size.y * 0.775, z: -size.z * 0.01 };
+      info.eyeEstimated = true;
+    }
+    if (de) eye.set(de.x, de.y, de.z);
+    btnInside.disabled = !de;
+    if (!de && inside) setInside(false);
+    applyCamera();
+
+    // 车漆：优先 Paint，其次常见的美术命名
+    paintMats = [];
+    Object.keys(built.materials).forEach(function (n) {
+      if (/^(paint|body|car_?body|bodypaint|car_?paint)$/i.test(n)) {
+        if (paintMats.indexOf(built.materials[n]) < 0) paintMats.push(built.materials[n]);
+      }
+    });
+
+    wheelNodes = [];
+    steerNodes = [];
+    built.root.traverse(function (o) {
+      if (/^Wheel_(FL|FR|RL|RR)$/i.test(o.name)) wheelNodes.push(o);
+      if (/^WheelSteer_/i.test(o.name)) steerNodes.push(o);
+    });
+    if (!wheelNodes.length) {
+      built.root.traverse(function (o) {
+        if (o.isMesh && /wheel|tyre|tire/i.test(o.name) && !/steer/i.test(o.name)) wheelNodes.push(o);
+      });
+    }
+
+    var tris = 0;
+    built.root.traverse(function (o) {
+      if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3;
+    });
+
+    var dim = info.dimensions;
+    metaEl.innerHTML =
+      '<div><span>' + (info.local ? '本地文件' : '车型') + '</span><b>' + info.label + '</b></div>' +
+      '<div><span>大小</span><b>' + Math.round((info.bytes || 0) / 1024) + ' KB</b></div>' +
+      (dim
+        ? '<div><span>尺寸（标称）</span><b>' + dim.length + ' × ' + dim.width + ' × ' + dim.height + ' m</b></div>'
+        : '<div><span>尺寸（实测）</span><b>' + size.z.toFixed(2) + ' × ' + size.x.toFixed(2) + ' × ' + size.y.toFixed(2) + ' m</b></div>') +
+      (info.wheelbase ? '<div><span>轴距 / 轮径</span><b>' + info.wheelbase + ' m / R' + Math.round(info.tireRadius * 1000) + '</b></div>' : '') +
+      '<div><span>三角面</span><b>' + Math.round(tris) + '</b></div>' +
+      '<div><span>材质 / 节点</span><b>' + Object.keys(built.materials).length + ' / ' + countNodes(built.root) + '</b></div>' +
+      '<div><span>车轮 / 转向枢轴</span><b>' + wheelNodes.length + ' / ' + steerNodes.length + '</b></div>' +
+      (info.eyeEstimated ? '<div><span>驾驶位眼点</span><b>按尺寸估算</b></div>' : '');
+
+    stateEl.style.display = 'none';
+    applyWire();
+    applyPaint();
+    if (inside) setInside(true);
+  }
+
+  async function load(entry) {
+    loadingEl.classList.remove('hide');
+    loadingEl.textContent = 'MODEL LOADING';
+    try {
+      var raw = await fetchAsset(entry, useGltf);
+      var built = buildScene(raw.gl, raw.bin);
+      mountModel(built, entry);
+    } catch (err) {
+      showError('载入失败：' + err.message + '（请用 node tools/server.js 8137 打开，file:// 下无法 fetch）');
+    } finally {
+      loadingEl.classList.add('hide');
+    }
+  }
+
+  /* 本地 GLB 检视：不用入库，直接拖进来看看归位/材质/分件对不对 */
+  function openLocalFile(file) {
+    loadingEl.classList.remove('hide');
+    loadingEl.textContent = 'MODEL LOADING';
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var raw = parseGLB(reader.result);
+        var built = buildScene(raw.gl, raw.bin);
+        mountModel(built, { label: file.name, bytes: file.size, local: true });
+      } catch (err) {
+        showError('本地模型解析失败：' + err.message);
+      } finally {
+        loadingEl.classList.add('hide');
+      }
+    };
+    reader.onerror = function () {
+      showError('本地文件读取失败');
+      loadingEl.classList.add('hide');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function countNodes(o) {
+    var n = 1;
+    o.children.forEach(function (c) { n += countNodes(c); });
+    return n;
+  }
+
+  function applyWire() {
+    if (!current) return;
+    current.root.traverse(function (o) {
+      if (o.isMesh && o.material) o.material.wireframe = wire;
+    });
+  }
+
+  /* --- 车漆调色：与游戏内 carModel.COLORS 同一套色板 --- */
+  var PALETTE = [0xd8dde4, 0xb8bcc4, 0x8a9099, 0x5b6470, 0xc9c19b, 0x7a8b9e, 0x9c8f7f, 0x6e7d6a, 0xa05a4e];
+  var paintHex = PALETTE[0];
+
+  function applyPaint() {
+    paintMats.forEach(function (m) {
+      m.color.setHex(paintHex).convertSRGBToLinear();
+      m.needsUpdate = true;
+    });
+    var sw = document.querySelectorAll('.swatch');
+    for (var i = 0; i < sw.length; i++) {
+      sw[i].classList.toggle('on', Number(sw[i].dataset.hex) === paintHex);
+    }
+  }
+
+  var swWrap = document.getElementById('swatches');
+  PALETTE.forEach(function (hex) {
+    var b = document.createElement('button');
+    b.className = 'swatch';
+    b.dataset.hex = String(hex);
+    b.style.background = '#' + hex.toString(16).padStart(6, '0');
+    b.title = '#' + hex.toString(16).padStart(6, '0');
+    b.addEventListener('click', function () {
+      paintHex = hex;
+      applyPaint();
+    });
+    swWrap.appendChild(b);
+  });
+
+  /* --- 工具栏 --- */
+  var btnWire = document.getElementById('btnWire');
+  var btnSpin = document.getElementById('btnSpin');
+  var btnSteer = document.getElementById('btnSteer');
+  var btnOrbit = document.getElementById('btnOrbit');
+  var btnInside = document.getElementById('btnInside');
+
+  // 车内视角：隐藏玻璃（透明外壳会糊一层环境反射）＋车内补一盏微弱的顶灯
+  var cabinLight = new THREE.PointLight(0xdfe8f5, 0, 4, 2);
+  scene.add(cabinLight);
+
+  function setInside(on) {
+    inside = on;
+    btnInside.classList.toggle('on', inside);
+    if (current) {
+      current.root.traverse(function (o) {
+        if (o.isMesh && o.material && o.material.name === 'Glass') o.visible = !inside;
+      });
+    }
+    cabinLight.intensity = inside ? 0.3 : 0;
+    cabinLight.position.set(0, eye.y + 0.22, eye.z - 0.15);
+    if (inside) {
+      autoOrbit = false;
+      btnOrbit.classList.remove('on');
+    }
+    applyCamera();
+  }
+
+  btnInside.addEventListener('click', function () { setInside(!inside); });
+
+  /* 本地 GLB 检视 */
+  var fileInput = document.getElementById('fileInput');
+  document.getElementById('btnOpen').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files[0]) openLocalFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  btnWire.addEventListener('click', function () {
+    wire = !wire;
+    btnWire.classList.toggle('on', wire);
+    applyWire();
+  });
+  btnSpin.addEventListener('click', function () {
+    spin = !spin;
+    btnSpin.classList.toggle('on', spin);
+  });
+  btnSteer.addEventListener('click', function () {
+    steer = !steer;
+    btnSteer.classList.toggle('on', steer);
+    if (!steer) steerNodes.forEach(function (n) { n.rotation.y = 0; });
+  });
+  btnOrbit.addEventListener('click', function () {
+    autoOrbit = !autoOrbit;
+    btnOrbit.classList.toggle('on', autoOrbit);
+  });
+  document.getElementById('btnReset').addEventListener('click', resetView);
+
+  /* --- 车型清单 --- */
+  var select = document.getElementById('model');
+  var entries = [];
+
+  fetch('manifest.json')
+    .then(function (r) { return r.json(); })
+    .then(function (manifest) {
+      entries = manifest.models;
+      entries.forEach(function (e, i) {
+        var o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = e.label;
+        select.appendChild(o);
+      });
+      select.addEventListener('change', function () {
+        load(entries[Number(select.value)]);
+      });
+      document.getElementById('format').addEventListener('change', function (e) {
+        useGltf = e.target.value === 'gltf';
+        load(entries[Number(select.value)]);
+      });
+      load(entries[0]);
+    })
+    .catch(function (err) {
+      showError('manifest.json 载入失败：' + err.message + '（请在项目根目录运行 node tools/server.js 8137）');
+      loadingEl.classList.add('hide');
+    });
+
+  /* ------------------------------------------------------------------ *
+   * 主循环
+   * ------------------------------------------------------------------ */
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  var clock = new THREE.Clock();
+
+  function tick() {
+    requestAnimationFrame(tick);
+    var dt = Math.min(clock.getDelta(), 0.05);
+
+    if (autoOrbit && !dragging) {
+      orbit.theta += dt * 0.28;
+      applyCamera();
+    }
+
+    // 车轮滚动：与游戏一致的换算——角速度 = 车速 / 半径（这里给 1.4 m/s 蠕行）
+    if (spin) {
+      spinAngle += dt * (1.4 / 0.3015);
+      wheelNodes.forEach(function (n) { n.rotation.x = spinAngle; });
+    }
+    if (steer) {
+      steerAngle = Math.sin(performance.now() * 0.00055) * 0.55;
+      steerNodes.forEach(function (n) { n.rotation.y = steerAngle; });
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  applyCamera();
+  tick();
+
+  // 调试/截图用：允许外部设置机位（也方便自动化回读）
+  window.__viewer = {
+    orbit: orbit,
+    apply: applyCamera,
+    look: function (theta, phi, dist) {
+      autoOrbit = false;
+      btnOrbit.classList.remove('on');
+      if (theta != null) orbit.theta = theta;
+      if (phi != null) orbit.phi = phi;
+      if (dist != null) orbit.dist = dist;
+      applyCamera();
+    },
+    selectModel: function (i) { select.value = String(i); load(entries[i]); },
+    openLocal: openLocalFile,
+    scene: scene,
+    camera: camera,
+    renderer: renderer,
+    materials: function () { return current && current.materials; },
+    root: function () { return current && current.root; }
+  };
+})();
+</script>
+</body>
+</html>
