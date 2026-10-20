@@ -183,7 +183,7 @@
   <div class="meta" id="meta"></div>
 </div>
 
-<div id="hint">拖拽旋转 · 滚轮缩放 · 双击复位</div>
+<div id="hint">拖拽旋转 · 滚轮缩放 · 双击复位<br>车内：拖拽转头 · WASD/方向键挪眼点 · Q/E 升降</div>
 <div id="state"></div>
 <div id="loading">MODEL LOADING</div>
 
@@ -230,9 +230,10 @@
   function reader(gl, bin) {
     function accessor(ai) {
       var a = gl.accessors[ai];
-      var bv = gl.bufferViews[a.bufferView];
       var comp = COMP[a.componentType];
       var n = NC[a.type];
+      if (a.bufferView == null) return new comp.T(a.count * n);   // 稀疏/全零 accessor
+      var bv = gl.bufferViews[a.bufferView];
       var start = (bv.byteOffset || 0) + (a.byteOffset || 0);
       var stride = bv.byteStride || comp.size * n;
       if (stride === comp.size * n) {
@@ -262,9 +263,14 @@
       if (texCache[ti]) return texCache[ti];
       var t = gl.textures[ti];
       var img = gl.images[t.source];
-      var bv = gl.bufferViews[img.bufferView];
-      var bytes = bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength);
-      var url = URL.createObjectURL(new Blob([bytes], { type: img.mimeType || 'image/png' }));
+      var url;
+      if (img.bufferView != null) {
+        var bv = gl.bufferViews[img.bufferView];
+        var bytes = bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength);
+        url = URL.createObjectURL(new Blob([bytes], { type: img.mimeType || 'image/png' }));
+      } else {
+        url = img.uri;       // data: 内联或外链
+      }
       var tex = new THREE.TextureLoader().load(url, function () { URL.revokeObjectURL(url); });
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.anisotropy = 4;
@@ -305,9 +311,13 @@
       var nd = gl.nodes[ni];
       var g = new THREE.Group();
       g.name = nd.name || '';
-      if (nd.translation) g.position.fromArray(nd.translation);
-      if (nd.rotation) g.quaternion.fromArray(nd.rotation);
-      if (nd.scale) g.scale.fromArray(nd.scale);
+      if (nd.matrix) {
+        g.applyMatrix4(new THREE.Matrix4().fromArray(nd.matrix));
+      } else {
+        if (nd.translation) g.position.fromArray(nd.translation);
+        if (nd.rotation) g.quaternion.fromArray(nd.rotation);
+        if (nd.scale) g.scale.fromArray(nd.scale);
+      }
       if (nd.mesh != null) {
         var mesh = gl.meshes[nd.mesh];
         mesh.primitives.forEach(function (prim, pi) {
@@ -521,6 +531,22 @@
   }, { passive: false });
   renderer.domElement.addEventListener('dblclick', resetView);
 
+  // 车内视角微调眼点：方向键/WASD 平移，Q/E 升降（导入模型的坐姿靠推算，常需要几厘米微调）
+  window.addEventListener('keydown', function (e) {
+    if (!inside) return;
+    var s = e.shiftKey ? 0.20 : 0.06;
+    var k = e.key;
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') eye.z += s;
+    else if (k === 'ArrowDown' || k === 's' || k === 'S') eye.z -= s;
+    else if (k === 'ArrowLeft' || k === 'a' || k === 'A') eye.x += s;
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') eye.x -= s;
+    else if (k === 'q' || k === 'Q' || k === 'PageUp') eye.y += s;
+    else if (k === 'e' || k === 'E' || k === 'PageDown') eye.y -= s;
+    else return;
+    e.preventDefault();
+    applyCamera();
+  });
+
   function resetView() {
     if (inside) {
       look.yaw = 0;
@@ -594,11 +620,45 @@
     orbit.target.copy(modelCenter);
     orbit.dist = Math.max(4.4, Math.max(size.x, size.z) * 1.45);
 
-    // 驾驶位眼点：manifest 自带优先，导入模型按尺寸估算
+    // 驾驶位眼点：manifest 自带优先；导入模型用方向盘节点推，再退回按尺寸估算
     var de = info.driverEye;
     if (!de && info.style !== 'wheel') {
-      de = { x: size.x * 0.212, y: size.y * 0.775, z: -size.z * 0.01 };
-      info.eyeEstimated = true;
+      var swBox = new THREE.Box3();
+      var swFound = false;
+      var seatBoxes = [];
+      built.root.updateMatrixWorld(true);
+      built.root.traverse(function (o) {
+        var nm = o.name || '';
+        if (/steer(ing)?[_\s-]?wheel/i.test(nm)) {
+          var bb = new THREE.Box3().setFromObject(o);
+          if (!bb.isEmpty()) { swBox.union(bb); swFound = true; }
+        } else if (/seat/i.test(nm)) {
+          var sb = new THREE.Box3().setFromObject(o);
+          if (!sb.isEmpty()) seatBoxes.push(sb);
+        }
+      });
+      var swPos = swFound ? swBox.getCenter(new THREE.Vector3()) : null;
+      if (seatBoxes.length && swPos) {
+        // 座椅优先：取离方向盘最近的那张（主驾），眼点放在头枕上方一点
+        var bestSeat = null, bestD = Infinity;
+        seatBoxes.forEach(function (sb) {
+          var c = sb.getCenter(new THREE.Vector3());
+          var d = Math.abs(c.x - swPos.x);
+          if (d < bestD) { bestD = d; bestSeat = sb; }
+        });
+        var sc = bestSeat.getCenter(new THREE.Vector3());
+        // 左右座椅做在同一个网格里时（bbox 很宽），按方向盘所在侧定眼点横向位置
+        var seatW = bestSeat.max.x - bestSeat.min.x;
+        var ex = (seatW > 0.75 && Math.abs(swPos.x) > 0.12) ? swPos.x : sc.x;
+        de = { x: ex, y: bestSeat.max.y - 0.08, z: sc.z - 0.05 };
+        info.eyeFromSeat = true;
+      } else if (swPos) {
+        de = { x: swPos.x, y: swPos.y + 0.34, z: swPos.z - 0.50 };
+        info.eyeFromWheel = true;
+      } else {
+        de = { x: size.x * 0.212, y: size.y * 0.775, z: -size.z * 0.01 };
+        info.eyeEstimated = true;
+      }
     }
     if (de) eye.set(de.x, de.y, de.z);
     btnInside.disabled = !de;
@@ -607,21 +667,52 @@
 
     // 车漆：优先 Paint，其次常见的美术命名
     paintMats = [];
-    Object.keys(built.materials).forEach(function (n) {
-      if (/^(paint|body|car_?body|bodypaint|car_?paint)$/i.test(n)) {
-        if (paintMats.indexOf(built.materials[n]) < 0) paintMats.push(built.materials[n]);
+    built.root.traverse(function (o) {
+      if (!o.isMesh || !o.material) return;
+      var nm = o.material.name || '';
+      if (/^(paint|body|car_?body|bodypaint|car_?paint)/i.test(nm) && paintMats.indexOf(o.material) < 0) {
+        paintMats.push(o.material);
       }
     });
 
     wheelNodes = [];
     steerNodes = [];
     built.root.traverse(function (o) {
-      if (/^Wheel_(FL|FR|RL|RR)$/i.test(o.name)) wheelNodes.push(o);
-      if (/^WheelSteer_/i.test(o.name)) steerNodes.push(o);
+      if (/^wheel[_\s-]?(fl|fr|rl|rr|lf|rf|lr)$/i.test(o.name)) wheelNodes.push(o);
+      if (/^wheel[_\s-]?steer/i.test(o.name)) steerNodes.push(o);
     });
     if (!wheelNodes.length) {
+      // 导入模型：按名字认车轮，但跳过已经选中的车轮子节点（轮辋/刹车盘）
       built.root.traverse(function (o) {
-        if (o.isMesh && /wheel|tyre|tire/i.test(o.name) && !/steer/i.test(o.name)) wheelNodes.push(o);
+        var nm = o.name || '';
+        if (!/wheel|tyre|tire/i.test(nm) || /steer/i.test(nm)) return;
+        var p = o.parent, dup = false;
+        while (p && p !== built.root) {
+          if (wheelNodes.indexOf(p) >= 0) { dup = true; break; }
+          p = p.parent;
+        }
+        if (!dup) wheelNodes.push(o);
+      });
+    }
+
+    // 没有转向枢轴就按前后位置补：把前轮挂到一个位于轮心的空节点下
+    if (wheelNodes.length === 4 && steerNodes.length === 0) {
+      built.root.updateMatrixWorld(true);
+      var wp = wheelNodes.map(function (w) {
+        var v = new THREE.Vector3();
+        w.getWorldPosition(v);
+        return v;
+      });
+      var zs = wp.map(function (v) { return v.z; }).sort(function (a, b) { return a - b; });
+      var zMid = (zs[1] + zs[2]) / 2;
+      wheelNodes.forEach(function (w, i) {
+        if (wp[i].z <= zMid) return;
+        var pivot = new THREE.Group();
+        pivot.name = 'WheelSteer_auto_' + i;
+        pivot.position.copy(built.root.worldToLocal(wp[i].clone()));
+        built.root.add(pivot);
+        pivot.attach(w);
+        steerNodes.push(pivot);
       });
     }
 
@@ -641,6 +732,8 @@
       '<div><span>三角面</span><b>' + Math.round(tris) + '</b></div>' +
       '<div><span>材质 / 节点</span><b>' + Object.keys(built.materials).length + ' / ' + countNodes(built.root) + '</b></div>' +
       '<div><span>车轮 / 转向枢轴</span><b>' + wheelNodes.length + ' / ' + steerNodes.length + '</b></div>' +
+      (info.eyeFromSeat ? '<div><span>驾驶位眼点</span><b>按驾驶座推算</b></div>' : '') +
+      (info.eyeFromWheel ? '<div><span>驾驶位眼点</span><b>按方向盘推算</b></div>' : '') +
       (info.eyeEstimated ? '<div><span>驾驶位眼点</span><b>按尺寸估算</b></div>' : '');
 
     stateEl.style.display = 'none';
@@ -653,7 +746,7 @@
     loadingEl.classList.remove('hide');
     loadingEl.textContent = 'MODEL LOADING';
     try {
-      var raw = await fetchAsset(entry, useGltf);
+      var raw = await fetchAsset(entry, useGltf && entry.gltf && entry.bin);
       var built = buildScene(raw.gl, raw.bin);
       mountModel(built, entry);
     } catch (err) {
@@ -838,11 +931,17 @@
     // 车轮滚动：与游戏一致的换算——角速度 = 车速 / 半径（这里给 1.4 m/s 蠕行）
     if (spin) {
       spinAngle += dt * (1.4 / 0.3015);
-      wheelNodes.forEach(function (n) { n.rotation.x = spinAngle; });
+      wheelNodes.forEach(function (n) {
+        if (n.userData.baseRotX == null) n.userData.baseRotX = n.rotation.x;
+        n.rotation.x = n.userData.baseRotX + spinAngle;
+      });
     }
     if (steer) {
       steerAngle = Math.sin(performance.now() * 0.00055) * 0.55;
-      steerNodes.forEach(function (n) { n.rotation.y = steerAngle; });
+      steerNodes.forEach(function (n) {
+        if (n.userData.baseRotY == null) n.userData.baseRotY = n.rotation.y;
+        n.rotation.y = n.userData.baseRotY + steerAngle;
+      });
     }
 
     renderer.render(scene, camera);
@@ -869,7 +968,8 @@
     camera: camera,
     renderer: renderer,
     materials: function () { return current && current.materials; },
-    root: function () { return current && current.root; }
+    root: function () { return current && current.root; },
+    wheelsInfo: function () { return wheelNodes.map(function (w) { return w.name; }); }
   };
 })();
 </script>

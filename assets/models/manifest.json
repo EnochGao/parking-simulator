@@ -65,18 +65,18 @@
           "Mirror_R"
         ]
       },
-      "triangles": 7466,
-      "bytes": 378900,
+      "triangles": 9102,
+      "bytes": 335904,
       "bbox": {
         "min": [
-          -0.971,
+          -0.999,
           0,
           -2.075
         ],
         "max": [
-          0.971,
+          0.999,
           1.568,
-          2.072
+          2.07
         ]
       }
     },
@@ -130,18 +130,18 @@
           "Mirror_R"
         ]
       },
-      "triangles": 7556,
-      "bytes": 380080,
+      "triangles": 9252,
+      "bytes": 338072,
       "bbox": {
         "min": [
-          -1.014,
+          -1.042,
           0,
           -2.33
         ],
         "max": [
-          1.014,
+          1.042,
           1.492,
-          2.328
+          2.326
         ]
       }
     },
@@ -195,18 +195,18 @@
           "Mirror_R"
         ]
       },
-      "triangles": 7566,
-      "bytes": 383332,
+      "triangles": 9238,
+      "bytes": 340868,
       "bbox": {
         "min": [
-          -1.049,
+          -1.077,
           0,
           -2.245
         ],
         "max": [
-          1.049,
+          1.077,
           1.7,
-          2.243
+          2.241
         ]
       }
     },
@@ -217,8 +217,52 @@
       "label": "轮组 185/60 R15",
       "style": "wheel",
       "tireRadius": 0.3015,
-      "bytes": 19044,
-      "triangles": 582
+      "bytes": 21220,
+      "triangles": 680
+    },
+    {
+      "file": "car_ferrari.glb",
+      "gltf": null,
+      "bin": null,
+      "label": "car_ferrari（导入模型）",
+      "style": "imported",
+      "imported": true,
+      "triangles": 358788,
+      "bytes": 13010188,
+      "bbox": {
+        "min": [
+          -1.023,
+          0,
+          -2.055
+        ],
+        "max": [
+          1.023,
+          1.12,
+          2.054
+        ]
+      }
+    },
+    {
+      "file": "car_bmw1m_rig.glb",
+      "gltf": null,
+      "bin": null,
+      "label": "car_bmw1m_rig（导入模型）",
+      "style": "imported",
+      "imported": true,
+      "triangles": 104376,
+      "bytes": 6976588,
+      "bbox": {
+        "min": [
+          -0.983,
+          0,
+          -2.18
+        ],
+        "max": [
+          0.983,
+          1.419,
+          2.18
+        ]
+      }
     }
   ]
 }

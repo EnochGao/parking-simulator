@@ -227,10 +227,36 @@ Geo.prototype.mapVerts = function (fn, flip) {
   }
 };
 
-Geo.prototype.mirrorX = function () {
-  this.mapVerts(function (p) { return [-p[0], p[1], p[2]]; }, true);
+/** 按当前三角形重新累加法线（镜像翻转后必须重算，否则法线朝内） */
+Geo.prototype.recomputeNormals = function () {
+  var p = this.pos, idx = this.idx;
+  this.acc = new Array(p.length).fill(0);
+  for (var i = 0; i < idx.length; i += 3) {
+    var a = idx[i], b = idx[i + 1], c = idx[i + 2];
+    var e1x = p[b * 3] - p[a * 3], e1y = p[b * 3 + 1] - p[a * 3 + 1], e1z = p[b * 3 + 2] - p[a * 3 + 2];
+    var e2x = p[c * 3] - p[a * 3], e2y = p[c * 3 + 1] - p[a * 3 + 1], e2z = p[c * 3 + 2] - p[a * 3 + 2];
+    var nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+    [a, b, c].forEach(function (v) {
+      this.acc[v * 3] += nx; this.acc[v * 3 + 1] += ny; this.acc[v * 3 + 2] += nz;
+    }, this);
+  }
   return this;
 };
+
+Geo.prototype.mirrorX = function () {
+  this.mapVerts(function (p) { return [-p[0], p[1], p[2]]; }, true);
+  return this.recomputeNormals();
+};
+
+/** 把一台镜像件复制成另一台（右后视镜） */
+function copyMirrorX(src, dst) {
+  dst.pos = src.pos.slice();
+  dst.idx = src.idx.slice();
+  dst.acc = src.acc.slice();
+  dst.mapVerts(function (p) { return [-p[0], p[1], p[2]]; }, true);
+  dst.recomputeNormals();
+  return dst;
+}
 
 Geo.prototype.translate = function (t) {
   this.mapVerts(function (p) { return [p[0] + t[0], p[1] + t[1], p[2] + t[2]]; }, false);
@@ -393,7 +419,7 @@ function addDiscX(g, x, r, segs, dir, center) {
 /* ============================ 3. 材质表 ============================ */
 
 var MAT = {
-  Paint: { base: 0xd8dde4, metallic: 0.55, roughness: 0.32 },
+  Paint: { base: 0xd8dde4, metallic: 0.55, roughness: 0.32, clearcoat: 1.0 },
   Glass: { base: 0x1e262e, metallic: 0.0, roughness: 0.18, alpha: 0.88 },
   Trim: { base: 0x1a1d21, metallic: 0.10, roughness: 0.78 },
   Chrome: { base: 0xc9ced6, metallic: 1.0, roughness: 0.20 },
@@ -425,6 +451,9 @@ function gltfMaterial(name, m, texIndex) {
   };
   if (m.alpha != null && m.alpha < 1) out.alphaMode = 'BLEND';
   if (m.emissive != null) out.emissiveFactor = hexLinear(m.emissive);
+  if (m.clearcoat != null) {
+    out.extensions = { KHR_materials_clearcoat: { clearcoatFactor: m.clearcoat, clearcoatRoughnessFactor: 0.05 } };
+  }
   if (m.tex && texIndex && texIndex[m.tex] != null) {
     out.pbrMetallicRoughness.baseColorTexture = { index: texIndex[m.tex] };
   }
@@ -606,35 +635,61 @@ function bodyRing(def, z, dims, K) {
 /** 沿 X 扫掠闭合二维剖面（剖面写 [z, y]，自动处理朝向与端盖）
  *  stations = [{ x, s(缩放), dz, dy }]，两端 s 收小即可得到圆角 */
 function addSweepX(g, profile, stations) {
-  var N = profile.length;
+  var N = profile.length, M = stations.length;
   var cz = 0, cy = 0;
   profile.forEach(function (p) { cz += p[0]; cy += p[1]; });
   cz /= N; cy /= N;
 
   function pt(st, p) {
+    var s = st.s == null ? 1 : st.s;
     return [st.x,
-      cy + (p[1] - cy) * (st.s == null ? 1 : st.s) + (st.dy || 0),
-      cz + (p[0] - cz) * (st.s == null ? 1 : st.s) + (st.dz || 0)];
+      cy + (p[1] - cy) * s + (st.dy || 0),
+      cz + (p[0] - cz) * s + (st.dz || 0)];
   }
 
-  for (var k = 0; k < stations.length - 1; k++) {
-    for (var j = 0; j < N; j++) {
+  // 共享顶点 → 平滑法线（逐面独立顶点会变成硬边，内饰/后视镜会显棱）
+  var base = g.verts();
+  for (var k = 0; k < M; k++) {
+    for (var j = 0; j < N; j++) g.vert(pt(stations[k], profile[j]));
+  }
+
+  for (k = 0; k < M - 1; k++) {
+    for (j = 0; j < N; j++) {
       var jn = (j + 1) % N;
-      var p0 = profile[j], p1 = profile[jn];
-      var my = (p0[1] + p1[1]) / 2 - cy, mz = (p0[0] + p1[0]) / 2 - cz;
-      addQuadPts(g, [pt(stations[k], p0), pt(stations[k], p1),
-        pt(stations[k + 1], p1), pt(stations[k + 1], p0)], [0, my, mz]);
+      var a = base + k * N + j, b = base + k * N + jn;
+      var c = base + (k + 1) * N + jn, d = base + (k + 1) * N + j;
+      var my = (profile[j][1] + profile[jn][1]) / 2 - cy;
+      var mz = (profile[j][0] + profile[jn][0]) / 2 - cz;
+      quadOut(g, a, b, c, d, [0, my, mz]);
     }
   }
   // 两端封口
-  var first = stations[0], last = stations[stations.length - 1];
-  var c0 = [first.x, cy + (first.dy || 0), cz + (first.dz || 0)];
-  var cl = [last.x, cy + (last.dy || 0), cz + (last.dz || 0)];
+  var c0 = g.vert([stations[0].x, cy + (stations[0].dy || 0), cz + (stations[0].dz || 0)]);
+  var cl = g.vert([stations[M - 1].x, cy + (stations[M - 1].dy || 0), cz + (stations[M - 1].dz || 0)]);
   for (var t = 0; t < N; t++) {
-    var q0 = profile[t], q1 = profile[(t + 1) % N];
-    addTriRef(g, c0, pt(first, q0), pt(first, q1), [-1, 0, 0]);
-    addTriRef(g, cl, pt(last, q0), pt(last, q1), [1, 0, 0]);
+    var v0 = base + t, v1 = base + (t + 1) % N;
+    triOut(g, c0, v0, v1, [-1, 0, 0]);
+    var w0 = base + (M - 1) * N + t, w1 = base + (M - 1) * N + (t + 1) % N;
+    triOut(g, cl, w0, w1, [1, 0, 0]);
   }
+}
+
+/** 用已有顶点号建四边形，并按 ref 修正绕序 */
+function quadOut(g, a, b, c, d, ref) {
+  var p = g.pos;
+  var e1 = [p[b * 3] - p[a * 3], p[b * 3 + 1] - p[a * 3 + 1], p[b * 3 + 2] - p[a * 3 + 2]];
+  var e2 = [p[c * 3] - p[a * 3], p[c * 3 + 1] - p[a * 3 + 1], p[c * 3 + 2] - p[a * 3 + 2]];
+  if (V.dot(V.cross(e1, e2), ref) < 0) g.quad(a, d, c, b);
+  else g.quad(a, b, c, d);
+}
+
+/** 用已有顶点号建三角形，并按 ref 修正绕序 */
+function triOut(g, a, b, c, ref) {
+  var p = g.pos;
+  var e1 = [p[b * 3] - p[a * 3], p[b * 3 + 1] - p[a * 3 + 1], p[b * 3 + 2] - p[a * 3 + 2]];
+  var e2 = [p[c * 3] - p[a * 3], p[c * 3 + 1] - p[a * 3 + 1], p[c * 3 + 2] - p[a * 3 + 2]];
+  if (V.dot(V.cross(e1, e2), ref) < 0) g.tri(a, c, b);
+  else g.tri(a, b, c);
 }
 
 /** 沿 X 扫掠并让两端收圆（内饰件常用） */
@@ -799,13 +854,15 @@ function buildCar(def) {
   var leather = new Geo('SteeringWheel', 'Leather');
 
   /* --- 5.1 下部车身（引擎盖/腰线/尾箱 + 轮拱） --- */
+  var BODY_K = 9;                                   // 截面细分（越大越圆润）
   var zs = stationList(def, dims.axleF, dims.axleR);
-  var rings = zs.map(function (z) { return bodyRing(def, z, dims, 6); });
+  var rings = zs.map(function (z) { return bodyRing(def, z, dims, BODY_K); });
+
   // 座舱口：把腰线顶面在座舱段挖开，车内视角才不是"坐在后备箱盖板上"
   var holeZ0 = def.greenhouse[def.greenhouse.length - 1].z + 0.50;
   var holeZ1 = def.greenhouse[0].z;
   addLoft(body, rings, true, true, function (k, j, za, zb) {
-    if (j !== 5) return false;
+    if (j !== BODY_K - 1) return false;             // 顶面正中那一条
     var zm = (za + zb) / 2;
     return zm > holeZ0 && zm < holeZ1;
   });
@@ -851,7 +908,9 @@ function buildCar(def) {
   var lampY = def.H * 0.455;
   // 大嘴下格栅 + 上部细进气缝（灯片之间）
   addBox(trim, [0, def.H * 0.315, noseZ - 0.020], [W * 0.255, 0.098, 0.030]);
-  addBox(chrome, [0, def.H * 0.315, noseZ + 0.006], [W * 0.248, 0.010, 0.012]);
+  [-0.032, 0, 0.032].forEach(function (dy) {
+    addBox(chrome, [0, def.H * 0.315 + dy, noseZ + 0.004], [W * 0.248, 0.005, 0.012]);
+  });
   addBox(trim, [0, def.H * 0.462, noseZ - 0.012], [W * 0.095, 0.020, 0.026]);
 
   var lampX = W * 0.262;
@@ -881,10 +940,10 @@ function buildCar(def) {
 
   /* --- 5.8 侧裙 / 门缝 / 门把手 / 引擎盖分缝 / 轮眉 --- */
   var skirtX = tableAt(def.widthProfile, 0) * 0.86;
-  addBeam(trim, [skirtX, tableAt(def.bottomProfile, 0.4) + 0.05, 0.75],
-    [skirtX, tableAt(def.bottomProfile, -1.0) + 0.05, -1.05], 0.05, 0.09);
-  addBeam(trim, [-skirtX, tableAt(def.bottomProfile, 0.4) + 0.05, 0.75],
-    [-skirtX, tableAt(def.bottomProfile, -1.0) + 0.05, -1.05], 0.05, 0.09);
+  addBeam(trim, [skirtX, tableAt(def.bottomProfile, 0.4) + 0.05, 0.72],
+    [skirtX, tableAt(def.bottomProfile, -0.9) + 0.05, -0.90], 0.05, 0.09);
+  addBeam(trim, [-skirtX, tableAt(def.bottomProfile, 0.4) + 0.05, 0.72],
+    [-skirtX, tableAt(def.bottomProfile, -0.9) + 0.05, -0.90], 0.05, 0.09);
 
   var seamY0 = tableAt(def.bottomProfile, 0) + 0.02;
   var seamY1 = beltY - 0.035;
@@ -912,7 +971,8 @@ function buildCar(def) {
       var segs = 12;
       var prev = null;
       for (var i = 0; i <= segs; i++) {
-        var d = -def.archR + (2 * def.archR) * (i / segs);
+        // 采样收在拱口内 2cm：拱口边缘 archY 会掉到车底，直接用会拉出长条尖片
+        var d = -(def.archR - 0.02) + (2 * (def.archR - 0.02)) * (i / segs);
         var y = archY(def, az + d, dims.axleF, dims.axleR);
         if (!isFinite(y)) y = tableAt(def.bottomProfile, az + d);
         var x = sx * (tableAt(def.widthProfile, az + d) * 0.995);
@@ -925,19 +985,44 @@ function buildCar(def) {
     });
   });
 
-  /* --- 5.9 后视镜（枢轴节点，可动；支臂落在腰线上，不悬空） --- */
-  var mirrorZ = def.greenhouse[0].z - 0.16;
-  var mirrorX = hw + 0.062;
-  var mirrorY = beltY + 0.055;
-  var mHalf = [0.062, 0.052, 0.098];
-  addBox(mirrorCapL, [0, 0, 0], mHalf);
-  addBox(mirrorCapR, [0, 0, 0], mHalf);
-  addBox(mirrorGlassL, [0, 0, -mHalf[2] - 0.006], [mHalf[0] * 0.86, mHalf[1] * 0.82, 0.006]);
-  addBox(mirrorGlassR, [0, 0, -mHalf[2] - 0.006], [mHalf[0] * 0.86, mHalf[1] * 0.82, 0.006]);
-  addBeam(trim, [hw - 0.045, beltY - 0.012, mirrorZ + 0.030],
-    [mirrorX - mHalf[0] * 0.4, mirrorY, mirrorZ + 0.020], 0.032, 0.030);
-  addBeam(trim, [-hw + 0.045, beltY - 0.012, mirrorZ + 0.030],
-    [-mirrorX + mHalf[0] * 0.4, mirrorY, mirrorZ + 0.020], 0.032, 0.030);
+  /* --- 5.9 后视镜（枢轴节点，可动；流线型壳体 + 内嵌镜片） --- */
+  // 位置：落在腰线上（不是玻璃线），前后与门三角窗对齐
+  var mirrorZ = def.greenhouse[0].z - 0.19;
+  var mirrorX = hw + 0.072;
+  var mirrorY = beltY - 0.018;
+  var mHalf = [0.088, 0.056, 0.050];
+
+  // 壳体：楔形——外端饱满、内端顺着镜臂收进去（不再是居中椭球）
+  var mProf = [
+    [-0.038, -0.026], [-0.022, -0.050], [0.010, -0.055], [0.034, -0.040],
+    [0.041, -0.008], [0.040, 0.030], [0.020, 0.052], [-0.014, 0.056],
+    [-0.038, 0.044], [-0.046, 0.010]
+  ];
+  var mSt = [];
+  for (var mi = 0; mi <= 10; mi++) {
+    var mt = mi / 10;
+    // 内端不收到 0：留 0.72 的截面，和镜臂自然接上
+    mSt.push({ x: -0.078 + 0.158 * mt, s: 0.72 + 0.28 * Math.sin(Math.PI * Math.pow(mt, 0.7)) });
+  }
+  addSweepX(mirrorCapL, mProf, mSt);
+
+  // 镜片 + 黑色镜框（真车镜片四周都有一圈黑色边框）
+  var glassBasis = [[1, 0, 0], [0, Math.cos(6 * D2R), -Math.sin(6 * D2R)], [0, Math.sin(6 * D2R), Math.cos(6 * D2R)]];
+  addBox(mirrorGlassL, [0.004, 0.004, -0.045], [0.050, 0.032, 0.003], glassBasis);
+  addBox(mirrorGlassL, [0.004, 0.041, -0.046], [0.055, 0.005, 0.004], glassBasis);
+  addBox(mirrorGlassL, [0.004, -0.033, -0.046], [0.055, 0.005, 0.004], glassBasis);
+  addBox(mirrorGlassL, [0.058, 0.004, -0.046], [0.005, 0.037, 0.004], glassBasis);
+  addBox(mirrorGlassL, [-0.050, 0.004, -0.046], [0.005, 0.037, 0.004], glassBasis);
+
+  copyMirrorX(mirrorCapL, mirrorCapR);
+  copyMirrorX(mirrorGlassL, mirrorGlassR);
+
+  // 镜臂 + 车门三角底座：车身同色，横向连到车门，视觉上"长"在车上
+  [1, -1].forEach(function (sx) {
+    var baseX = sx * (bodyHalfWidth(def, mirrorZ, mirrorY, dims) - 0.004);
+    addBox(body, [baseX, mirrorY, mirrorZ + 0.004], [0.020, 0.042, 0.052]);
+    addBeam(body, [baseX, mirrorY, mirrorZ], [sx * (mirrorX - 0.055), mirrorY, mirrorZ - 0.004], 0.036, 0.030);
+  });
 
   /* --- 5.10 雨刮 / 天线 / 车顶行李架 --- */
   var wiperY = tableAt(def.topProfile, def.greenhouse[0].z) + 0.012;
@@ -1088,14 +1173,15 @@ function buildCar(def) {
 
   /* 门板：贴合车身内壁的分段面板 + 扶手 + 拉手 + 喇叭 */
   var dcY0 = def.H * 0.175, dcY1 = beltY - 0.020;
-  var dcZ0 = cabinZ0 - 0.06, dcZ1 = -1.08, dcBands = 5;
+  // 门板：前后沿留在轮拱之外，并整体内收 45mm，保证不会从车身侧面探出
+  var dcZ0 = cabinZ0 - 0.30, dcZ1 = -0.86, dcBands = 5;
   var dcZm = (dcZ0 + dcZ1) / 2, dcZh = (dcZ0 - dcZ1) / 2;
   [1, -1].forEach(function (sx) {
     for (var b = 0; b < dcBands; b++) {
       var ya = dcY0 + (dcY1 - dcY0) * b / dcBands;
       var yb2 = dcY0 + (dcY1 - dcY0) * (b + 1) / dcBands;
-      var xw = bodyHalfWidth(def, dcZm, (ya + yb2) / 2, dims) - 0.020;
-      addBox(cabin, [sx * xw, (ya + yb2) / 2, dcZm], [0.012, (yb2 - ya) / 2, dcZh]);
+      var xw = bodyHalfWidth(def, dcZm, (ya + yb2) / 2, dims) - 0.045;
+      addBox(cabin, [sx * xw, (ya + yb2) / 2, dcZm], [0.014, (yb2 - ya) / 2, dcZh]);
     }
     var armX = sx * (bodyHalfWidth(def, 0.1, 0.700, dims) - 0.055);
     addBox(cabin, [armX, 0.700, 0.030], [0.030, 0.026, 0.300]);          // 扶手
@@ -1132,6 +1218,13 @@ function buildCar(def) {
   addBox(chrome, [eyeX - 0.070, 0.560, 0.930], [0.045, 0.062, 0.010], [[1, 0, 0], [0, 0.94, -0.34], [0, 0.34, 0.94]]);
   addBox(chrome, [eyeX + 0.020, 0.560, 0.933], [0.022, 0.050, 0.010], [[1, 0, 0], [0, 0.94, -0.34], [0, 0.34, 0.94]]);
   addBox(trim, [eyeX + 0.155, 0.575, 0.945], [0.055, 0.082, 0.012], [[1, 0, 0], [0, 0.94, -0.34], [0, 0.34, 0.94]]);
+
+  // 轮拱内衬：轮子后面放一块深色圆盘，轮拱里不再是白色车身内壁
+  [dims.axleF, dims.axleR].forEach(function (az) {
+    [1, -1].forEach(function (sx) {
+      addDiscX(trim, sx * (def.trackF / 2 - 0.14), def.archR - 0.015, 18, sx, [0, def.tireR + 0.05, az]);
+    });
+  });
 
   /* --- 5.12 车轮（四个独立节点，前轮带转向枢轴） --- */
   var wheels = [];
@@ -1227,18 +1320,18 @@ function buildWheel(def, mirror) {
     [-hwT, 0.64 * R], [-hwT, 0.86 * R], [-hwT * 0.94, 0.965 * R], [-hwT * 0.78, R],
     [hwT * 0.78, R], [hwT * 0.94, 0.965 * R], [hwT, 0.86 * R], [hwT, 0.64 * R]
   ];
-  addRevolveX(tire, prof, 18, [0, 0, 0]);
+  addRevolveX(tire, prof, 22, [0, 0, 0]);
   // 内孔侧壁（首尾相连，被轮辋外唇遮住）
-  addRevolveX(tire, [[hwT, 0.64 * R], [-hwT, 0.64 * R]], 18, [0, 0, 0]);
+  addRevolveX(tire, [[hwT, 0.64 * R], [-hwT, 0.64 * R]], 22, [0, 0, 0]);
 
   // 轮辋（15 寸胎圈 ≈0.63R）：只做外唇圈 + 轮心盘，中间镂空，刹车盘透出来
   var rimFace = [
     [hwT * 0.86, 0.572 * R], [hwT * 0.90, 0.640 * R], [hwT * 0.83, 0.648 * R],
     [hwT * 0.76, 0.560 * R]
   ];
-  addRevolveX(rim, rimFace, 18, [0, 0, 0]);
-  addRevolveX(rim, [[hwT * 0.86, 0.560 * R], [hwT * 0.70, 0.500 * R]], 18, [0, 0, 0]);
-  addDiscX(rim, hwT * 0.62, 0.150 * R, 14, 1, [0, 0, 0]);
+  addRevolveX(rim, rimFace, 22, [0, 0, 0]);
+  addRevolveX(rim, [[hwT * 0.86, 0.560 * R], [hwT * 0.70, 0.500 * R]], 22, [0, 0, 0]);
+  addDiscX(rim, hwT * 0.62, 0.150 * R, 16, 1, [0, 0, 0]);
 
   // 5 辐：轮心 → 轮辋内缘
   for (var k = 0; k < 5; k++) {
@@ -1417,6 +1510,12 @@ function buildGLTF(parts, modelName, meta) {
   // 根节点（带整车元数据，方便引擎读取尺寸/约定）
   var root = addNode(modelName, { children: rootChildren, extras: meta });
   gl.scenes[0].nodes = [root];
+
+  // 声明用到的 glTF 扩展（清漆车漆；不支持的引擎会忽略，不影响加载）
+  if (gl.materials.some(function (mm) { return mm.extensions && mm.extensions.KHR_materials_clearcoat; })) {
+    gl.extensionsUsed = gl.extensionsUsed || [];
+    if (gl.extensionsUsed.indexOf('KHR_materials_clearcoat') < 0) gl.extensionsUsed.push('KHR_materials_clearcoat');
+  }
 
   var pad = (4 - (binLen % 4)) % 4;
   if (pad) { bin.push(Buffer.alloc(pad)); binLen += pad; }

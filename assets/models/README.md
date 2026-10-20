@@ -9,6 +9,8 @@
 | `car_sedan.glb` / `.gltf` + `.bin` | 紧凑型三厢（sedan）：4.62 × 1.78 × 1.455 m |
 | `car_suv.glb` / `.gltf` + `.bin` | 紧凑型 SUV：4.45 × 1.85 × 1.66 m |
 | `wheel_185_60_r15.glb` / `.gltf` + `.bin` | 独立轮组（轮胎 + 轮辋 + 刹车盘，轮心为原点） |
+| `car_ferrari.glb` | **导入的外部高模**（458 Spider，358 788 面 / 12.7 MB），敞篷、含完整内饰 |
+| `car_bmw1m_rig.glb` | **导入的外部高模**（BMW 1M，104 376 面 / 6.65 MB）：四门、完整内饰、四轮独立；镜壳+镜片拆成 `Mirror_L/R`、方向盘 `SteeringWheel`，都带枢轴 |
 | `manifest.json` | 车型清单：尺寸、轴距、轮径、驾驶位眼点、材质/节点名、三角面、包围盒 |
 | `viewer.html` | 零依赖预览器（three.js + 内置迷你 glTF 载入器）：车漆/线框/转轮/打方向/车内视角 |
 
@@ -65,12 +67,16 @@ car_gr9
 
 | 车型 | 长×宽×高 (m) | 轴距 (m) | 轮胎半径 (m) | 三角面 | 体积 |
 |---|---|---|---|---|---|
-| car_gr9 | 4.109 × 1.694 × 1.537 | 2.53 | 0.3015 | 7 466 | ~370 KB |
-| car_sedan | 4.62 × 1.78 × 1.455 | 2.70 | 0.312 | 7 556 | ~371 KB |
-| car_suv | 4.45 × 1.85 × 1.66 | 2.66 | 0.345 | 7 566 | ~374 KB |
-| wheel_185_60_r15 | 轮径 0.603 | — | 0.3015 | 582 | ~19 KB |
+| car_gr9 | 4.109 × 1.694 × 1.537 | 2.53 | 0.3015 | 9 026 | ~322 KB |
+| car_sedan | 4.62 × 1.78 × 1.455 | 2.70 | 0.312 | 9 176 | ~324 KB |
+| car_suv | 4.45 × 1.85 × 1.66 | 2.66 | 0.345 | 9 162 | ~327 KB |
+| wheel_185_60_r15 | 轮径 0.603 | — | 0.3015 | 680 | ~21 KB |
 
-其中内饰约 2 400 面，贴图约 +45 KB。
+车漆带 `KHR_materials_clearcoat`（清漆层，three.js/Blender 支持，不支持的引擎忽略）。
+
+其中内饰约 2 400 面、贴图约 +45 KB；车身截面从 6 段加密到 9 段（腰线/轮拱更顺），
+轮毂/轮胎 22 段、五辐镂空轮辋，轮拱内侧补了深色内衬，前格栅改为三条镀铬横条；
+后视镜是沿车宽扫掠的流线壳体（不再是方盒），镜片内嵌在壳体背面，仍然是可调枢轴节点。
 
 ## 重新生成
 
@@ -129,6 +135,83 @@ npm run import:model -- assets/models/incoming/civic.glb --name car_civic --leng
 
 轮子如果焊在车身上，`Wheel_*` 节点不存在，游戏里就转不了——这种情况在 Blender 里按轮心
 分离成四个对象再导出即可。
+
+### 现在已经导入的示例
+
+`car_ferrari.glb`：取 three.js 官方示例里的 458 Spider（`examples/models/gltf/ferrari.glb`），
+处理链路如下，可作为你自己接车模的参照：
+
+```bash
+# 1) 源文件是 Draco 压缩，先解压（npx 临时工具，不写进项目依赖）
+npx @gltf-transform/cli copy assets/models/incoming/ferrari.glb assets/models/incoming/ferrari_plain.glb
+# 2) 归位：车头原本朝 -Z → --yaw 180；缩放到游戏车长 4.109m；材质改名；只出 GLB
+npm run import:model -- assets/models/incoming/ferrari_plain.glb --name car_ferrari --glb-only \
+  --yaw 180 --length 4.109 --manifest \
+  --rename Body_Color=Paint --rename Glass_Gray=Glass --rename Tires=Tire \
+  --rename Interior_dark=Cabin --rename metal_chrome=Chrome --rename Leather_red=Seat
+```
+
+结果：4.11 × 2.05 × 1.12 m、358 788 面、12.7 MB；4 个车轮节点（`wheel_fl/fr/rl/rr`）可滚动，
+`steering_wheel` 节点存在，查看器据此推算坐姿眼点，车内视角可用。
+
+`car_bmw1m_rig.glb`：用户提供的 Sketchfab 模型（FBX 转 GLB）。源模型按 5.10 m 长导出（单位偏大），
+按 1M 真实车长归位；镜壳/方向盘由 `rig_model.js` 拆件加枢轴。完整链路：
+
+```bash
+# 1) 先拆件加枢轴（源文件坐标，未缩放）
+node tools/rig_model.js assets/models/incoming/ac_-_bmw_1m_free.glb \
+  --spec rig_bmw.json --out assets/models/incoming/bmw_rigged.glb
+# 2) 再归位 + 材质对齐 + 写清单
+npm run import:model -- assets/models/incoming/bmw_rigged.glb --name car_bmw1m_rig \
+  --glb-only --length 4.36 --manifest \
+  --rename LIVREA=Paint --rename VETRI_Nero=Glass --rename VETRI_Fanali=Glass \
+  --rename RT_Battistrada=Tire --rename RT_rim=Rim --rename LOGHI_RIM=Rim \
+  --rename INT_Skin=Seat --rename INT_Velluto=Seat --rename INT_Plaastica_NERA=Cabin \
+  --rename INT_Display=Screen --rename MIRROR=MirrorGlass \
+  --rename FANALI_Anteriori=HeadLamp --rename Fanali_POSTERIORI_TS=TailLamp
+# 完整命令见 git 历史；材质共 40 个，基本都映射到 Paint/Glass/Cabin/Seat/Rim/Tire/Chrome/Trim
+```
+
+接入结果：4.36 × 1.97 × 1.42 m（宽含后视镜）、100 582 面、6.75 MB；四个轮组
+`WHEEL_RR / WHEEL_RF / WHEEL_LR / WHEEL_LF` 是独立节点（注意它用 RF/LF 的写法，
+查看器两种顺序都认），查看器自动补了前轮转向枢轴；内饰、座椅、iDrive 屏、安全带齐全；
+后视镜玻璃是独立网格，但镜壳与车门同属一个网格，**不能单独转动**（游戏用自带镜面相机，不影响）。
+
+> **注意**：这两个都是第三方模型，仅适合本地/学习验收；对外发行请换成有明确授权、
+> 且不含车厂商标的模型。另外 10–35 万面对手机与微信小游戏过重——真正进游戏前需要
+> 减面（`gltf-transform simplify` 对这种多材质硬表面模型效果有限）或走 Draco + 解码器。
+
+## 拆件 / 加枢轴（`tools/rig_model.js`）
+
+外部模型常见问题：后视镜、门把手和车门在**同一个网格对象**里，但几何上其实是各自独立的壳。
+这个工具按**连通分量**把它们拆成独立节点，并把原点放到铰链/轮心，不改拓扑、不重画模型。
+
+```bash
+node tools/rig_model.js in.glb --spec rig.json --out out.glb
+# rig.json
+{
+  "extract": [
+    { "from": "polymsh_detached29_SUB1_LIVREA_0",     // 从哪个网格里拆
+      "name": "Mirror_L",                              // 新节点名
+      "center": [1.04, 1.18, 0.48], "radius": 0.18,    // 选中包围盒中心落在球内的连通块
+      "pivot": [0.93, 1.18, 0.48],                     // 枢轴（世界坐标，这里是镜脚）
+      "attach": ["polymsh_detached29_SUB2_MIRROR_0"] } // 镜片一起挂到新节点下
+  ],
+  "pivot": [
+    { "node": "polymsh258_SUB1_INT_Plaastica_NERA_0",  // 本来就独立的零件
+      "name": "SteeringWheel", "pivot": [0.42, 1.02, 0.28] }
+  ]
+}
+```
+
+- **能拆的前提**：这块几何是独立壳（顶点不与别处共享）。工具会打印每个连通块的面数/中心，先跑一次就知道。
+- **拆不了的**：真正焊死（共享顶点、连续曲面）的几何——那只能在 Blender 里做拓扑切割；
+  只存在于贴图里的细节（比如码表指针）——几何上没有，只能换贴图或游戏叠加 HUD。
+- 拆完节点会自动加 `extras: { kind: "pivot", axis }`，并保留原网格的其余部分。
+
+`car_bmw1m_rig.glb` 就是用它做的：从车门网格里拆出 298 面的镜壳，和 32 面的镜片一起挂到
+`Mirror_L / Mirror_R`（枢轴在镜脚），方向盘 `SteeringWheel` 补枢轴；查看器里已实测：
+掰后视镜、转方向盘都是整体转动。
 
 ## 接入示例（three.js）
 

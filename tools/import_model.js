@@ -202,6 +202,7 @@ function parseArgs(argv) {
     else if (k === '--pivot') a.pivot = argv[++i];
     else if (k === '--rename') a.rename.push(argv[++i]);
     else if (k === '--manifest') a.manifest = true;
+    else if (k === '--glb-only') a.glbOnly = true;
     else if (k === '--inspect') a.inspect = true;
     else if (k === '--help' || k === '-h') a.help = true;
     else if (!k.startsWith('--')) a.input = k;
@@ -304,14 +305,16 @@ function main() {
   var glbPath = path.join(args.out, base + '.glb');
   fs.writeFileSync(glbPath, writeGLB(gl, raw.bin));
 
-  var gltf = JSON.parse(JSON.stringify(gl));
-  gltf.buffers = gltf.buffers || [];
-  if (gltf.buffers[0]) {
-    var binName = base + '.bin';
-    gltf.buffers[0] = { uri: binName, byteLength: raw.bin ? raw.bin.length : 0 };
-    fs.writeFileSync(path.join(args.out, binName), raw.bin || Buffer.alloc(0));
+  if (!args.glbOnly) {
+    var gltf = JSON.parse(JSON.stringify(gl));
+    gltf.buffers = gltf.buffers || [];
+    if (gltf.buffers[0]) {
+      var binName = base + '.bin';
+      gltf.buffers[0] = { uri: binName, byteLength: raw.bin ? raw.bin.length : 0 };
+      fs.writeFileSync(path.join(args.out, binName), raw.bin || Buffer.alloc(0));
+    }
+    fs.writeFileSync(path.join(args.out, base + '.gltf'), JSON.stringify(gltf, null, 2));
   }
-  fs.writeFileSync(path.join(args.out, base + '.gltf'), JSON.stringify(gltf, null, 2));
 
   var after = analyse(gl);
   console.log('\n✓ ' + path.relative(ROOT, glbPath) + '  ' + (fs.statSync(glbPath).size / 1024).toFixed(1) + ' KB');
@@ -324,11 +327,11 @@ function main() {
   if (args.manifest) {
     var mfPath = path.join(args.out, 'manifest.json');
     var mf = fs.existsSync(mfPath) ? JSON.parse(fs.readFileSync(mfPath, 'utf8')) : { models: [] };
-    mf.models = (mf.models || []).filter(function (x) { return x.name !== base; });
+    mf.models = (mf.models || []).filter(function (x) { return x.file !== base + '.glb'; });
     mf.models.push({
       file: base + '.glb',
-      gltf: base + '.gltf',
-      bin: base + '.bin',
+      gltf: args.glbOnly ? null : base + '.gltf',
+      bin: args.glbOnly ? null : base + '.bin',
       label: base + '（导入模型）',
       style: 'imported',
       imported: true,
