@@ -1,21 +1,34 @@
-/* 平台抽象层（浏览器 / 微信小游戏双端）
+/* 平台抽象层（浏览器 / 微信小游戏 / 抖音小游戏 多端）
  * 目标：把所有"浏览器有、小游戏没有"的环境差异收口到一个对象里——
  *   DOM（document/body/classList）、window 尺寸、resize/前后台事件、键盘、
- *   画布创建（小游戏首个 wx.createCanvas 是屏幕画布，之后才是离屏）、
- *   WebAudio（小游戏 wx.createWebAudioContext）、localStorage（同步 KV）、
- *   触屏事件（小游戏无 canvas 事件，只有全局 wx.onTouch*）。
- * 上层（game.js/ui_wx.js）只调 PS.Platform.*，不直接碰 document/wx。
- * Node 端（无头回归）不加载本文件，业务模块各自保留兜底。 */
+ *   画布创建（小游戏首个 createCanvas 是屏幕画布，之后才是离屏）、
+ *   WebAudio（微信 createWebAudioContext / 抖音 getAudioContext）、
+ *   localStorage（同步 KV）、触屏事件（小游戏无 canvas 事件，只有全局 onTouch*）。
+ * 上层（game.js/ui_wx.js）只调 PS.Platform.*，不直接碰 document/wx/tt。
+ * Node 端（无头回归）不加载本文件，业务模块各自保留兜底。
+ * 多平台要点：微信 wx.* 与抖音 tt.* 大部分接口同名同义（createCanvas、
+ *   onTouch 系列事件、onShow、getSystemInfoSync、同步 KV、showModal…），差异仅三处——
+ *   音频工厂（wx.createWebAudioContext 按需新建 ↔ tt.getAudioContext 全局单例）、
+ *   窗口尺寸事件（tt 无 onWindowResize，锁横屏下以 onDeviceOrientationChange 兜底）、
+ *   窗口信息（tt 无 getWindowInfo，一律走 getSystemInfoSync）。
+ * 新宿主（快手/支付宝等）只要满足这组同名接口，探测处加一行即可接入。 */
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.PS = root.PS || {}; root.PS.Platform = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
-  var isWx = typeof wx !== 'undefined' && !!wx.getSystemInfoSync;
-  var isWeb = !isWx && typeof document !== 'undefined';
+  /* 宿主探测：优先微信 wx，其次抖音 tt；都没有则是浏览器。
+   * getSystemInfoSync 是两家的公共身份 API（早期版本必有），比整对象 typeof 探测更稳 */
+  var host = null, hostName = '';
+  if (typeof wx !== 'undefined' && !!wx.getSystemInfoSync) { host = wx; hostName = 'wx'; }
+  else if (typeof tt !== 'undefined' && !!tt.getSystemInfoSync) { host = tt; hostName = 'tt'; }
+  var isWx = hostName === 'wx';
+  var isTt = hostName === 'tt';
+  var isMiniGame = !!host;                      // 任意小游戏宿主（业务分支用这个，别绑具体平台）
+  var isWeb = !isMiniGame && typeof document !== 'undefined';
 
   /* ---------- 小游戏端状态 ---------- */
-  var wxScreenCanvas = null;      // 屏幕画布（首个 wx.createCanvas），three.js 主渲染目标
+  var hostScreenCanvas = null;    // 屏幕画布（首个 createCanvas），three.js 主渲染目标
   var canvasCreated = false;      // 是否已创建过画布（首块=屏幕，之后=离屏）
   var resizeCbs = [];
   var visibilityCbs = [];
@@ -27,12 +40,13 @@
   var winInfo = null;             // 窗口信息缓存（resize 时刷新）
 
   function refreshWinInfo() {
-    if (!isWx) return;
-    try { winInfo = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); }
+    if (!isMiniGame) return;
+    /* tt 无 getWindowInfo；wx 有（省字段）。两家 getSystemInfoSync 均返回同形窗口信息 */
+    try { winInfo = host.getWindowInfo ? host.getWindowInfo() : host.getSystemInfoSync(); }
     catch (e) { winInfo = winInfo || { windowWidth: 375, windowHeight: 667, pixelRatio: 2 }; }
   }
 
-  /* 触摸总线：wx.onTouch* 一次注册，分发给 canvas 触摸订阅者与全局触下回调。
+  /* 触摸总线：onTouch* 一次注册，分发给 canvas 触摸订阅者与全局触下回调。
    * 事件形状与浏览器 TouchEvent 的 touches/changedTouches 对齐（identifier/clientX/clientY），
    * game.js 的双指拧镜头与 ui_wx 的控件命中测试消费同一份数据。 */
   function dispatchTouch(kind, e) {
@@ -47,28 +61,33 @@
     if (kind === 'start') for (var j = 0; j < globalPointCbs.length; j++) globalPointCbs[j](ev);
   }
 
-  function initWx() {
+  function onHostResize() {
     refreshWinInfo();
-    wx.onTouchStart(function (e) { dispatchTouch('start', e); });
-    wx.onTouchMove(function (e) { dispatchTouch('move', e); });
-    wx.onTouchEnd(function (e) { dispatchTouch('end', e); });
-    wx.onTouchCancel(function (e) { dispatchTouch('end', e); });
-    wx.onWindowResize(function () {
-      refreshWinInfo();
-      for (var i = 0; i < resizeCbs.length; i++) { try { resizeCbs[i](); } catch (err) {} }
-    });
-    wx.onShow(function () {
+    for (var i = 0; i < resizeCbs.length; i++) { try { resizeCbs[i](); } catch (err) {} }
+  }
+
+  function initMiniGame() {
+    refreshWinInfo();
+    host.onTouchStart(function (e) { dispatchTouch('start', e); });
+    host.onTouchMove(function (e) { dispatchTouch('move', e); });
+    host.onTouchEnd(function (e) { dispatchTouch('end', e); });
+    host.onTouchCancel(function (e) { dispatchTouch('end', e); });
+    /* 窗口尺寸事件：wx 有 onWindowResize；tt 没有（锁横屏全屏下尺寸本就恒定），
+     * 以 onDeviceOrientationChange 近似兜底——万一系统旋转/分屏，至少刷新窗口信息并重排 */
+    if (host.onWindowResize) host.onWindowResize(onHostResize);
+    else if (host.onDeviceOrientationChange) host.onDeviceOrientationChange(onHostResize);
+    host.onShow(function () {
       for (var i = 0; i < visibilityCbs.length; i++) { try { visibilityCbs[i](false); } catch (err) {} }
     });
-    wx.onHide(function () {
+    host.onHide(function () {
       for (var i = 0; i < visibilityCbs.length; i++) { try { visibilityCbs[i](true); } catch (err) {} }
     });
   }
 
   /* ---------- 公共接口 ---------- */
-  /* wx 画布缺 three.js 需要的事件接口：WebGLRenderer 构造时注册 webglcontextlost。
+  /* 小游戏画布缺 three.js 需要的事件接口：WebGLRenderer 构造时注册 webglcontextlost。
    * 挂 no-op 垫片（画布是普通 JS 对象，可直接加属性） */
-  function patchWxCanvas(c) {
+  function patchHostCanvas(c) {
     if (!c.style) c.style = {};                 // three setSize 写 style（有守卫，双保险）
     if (!c.addEventListener) {
       c.addEventListener = function () {};
@@ -79,19 +98,22 @@
 
   var api = {
     isWx: isWx,
+    isTt: isTt,
+    /** 任意小游戏宿主（wx/tt/未来平台）——业务分支请用本标志而非 isWx */
+    isMiniGame: isMiniGame,
     isWeb: isWeb,
     /** 小游戏端必须最先调用（注册触摸总线/窗口事件）；网页端空操作 */
-    init: function () { if (isWx && !winInfo) initWx(); },
+    init: function () { if (isMiniGame && !winInfo) initMiniGame(); },
 
     /** 屏幕画布：three.js 主渲染目标。网页端返回未插入 DOM 的 canvas（由 attach 挂载）；
-     * 小游戏端首个 wx.createCanvas 即屏幕画布（只能有一块，之后 createCanvas 全是离屏）。 */
+     * 小游戏端首个 createCanvas 即屏幕画布（只能有一块，之后 createCanvas 全是离屏）。 */
     createScreenCanvas: function () {
-      if (isWx) {
-        if (!wxScreenCanvas) {
-          wxScreenCanvas = patchWxCanvas(wx.createCanvas());
+      if (isMiniGame) {
+        if (!hostScreenCanvas) {
+          hostScreenCanvas = patchHostCanvas(host.createCanvas());
           canvasCreated = true;
         }
-        return wxScreenCanvas;
+        return hostScreenCanvas;
       }
       return document.createElement('canvas');
     },
@@ -101,19 +123,19 @@
     },
     /** 离屏画布（贴图/仪表/镜面渲染目标等）。注意：小游戏端必须先 createScreenCanvas */
     createCanvas: function () {
-      if (isWx) {
+      if (isMiniGame) {
         if (!canvasCreated) { canvasCreated = true; return api.createScreenCanvas(); }
-        return patchWxCanvas(wx.createCanvas());
+        return patchHostCanvas(host.createCanvas());
       }
       return document.createElement('canvas');
     },
-    /** WebGL 上下文：小游戏端显式创建 WebGL1（微信运行时仅支持 'webgl'；部分真机内核
+    /** WebGL 上下文：小游戏端显式创建 WebGL1（微信/抖音运行时均只保证 'webgl'；部分真机内核
      *  对 'webgl2' 返回残缺上下文而非 null，three 若误入 WebGL2 路径即黑屏——真机与
      *  开发者工具的最大行为差异点，此处钉死）。带属性创建失败时降级为无属性再试——
      *  个别内核对 alpha/antialias 属性挑剔；两次都失败返回 undefined（three 自建兜底）。
      *  网页端恒返回 undefined，交由 three 自选（浏览器 WebGL2 完整可用，行为不变）。 */
     createGlContext: function (canvas, opts) {
-      if (!isWx) return undefined;
+      if (!isMiniGame) return undefined;
       try {
         var gl = opts ? canvas.getContext('webgl', opts) : null;
         if (!gl) gl = canvas.getContext('webgl');
@@ -122,20 +144,20 @@
     },
 
     width: function () {
-      if (isWx) { if (!winInfo) { initWx(); } return winInfo ? Math.max(1, winInfo.windowWidth) : 0; }
+      if (isMiniGame) { if (!winInfo) { initMiniGame(); } return winInfo ? Math.max(1, winInfo.windowWidth) : 0; }
       return Math.max(1, window.innerWidth);
     },
     height: function () {
-      if (isWx) { if (!winInfo) { initWx(); } return winInfo ? Math.max(1, winInfo.windowHeight) : 0; }
+      if (isMiniGame) { if (!winInfo) { initMiniGame(); } return winInfo ? Math.max(1, winInfo.windowHeight) : 0; }
       return Math.max(1, window.innerHeight);
     },
     pixelRatio: function () {
-      if (isWx) { refreshWinInfo(); return winInfo.pixelRatio || 1; }
+      if (isMiniGame) { refreshWinInfo(); return winInfo.pixelRatio || 1; }
       return window.devicePixelRatio || 1;
     },
     /** 安全区 insets {top,right,bottom,left}（刘海屏适配）；网页端全 0 */
     safeInsets: function () {
-      if (!isWx) return { top: 0, right: 0, bottom: 0, left: 0 };
+      if (!isMiniGame) return { top: 0, right: 0, bottom: 0, left: 0 };
       refreshWinInfo();
       var sa = winInfo.safeArea;
       if (!sa) return { top: 0, right: 0, bottom: 0, left: 0 };
@@ -148,32 +170,32 @@
     },
     /** 触屏/粗指针设备判定（决定虚拟驾驶控件与触屏画质档） */
     isCoarsePointer: function () {
-      if (isWx) return true;   // 小游戏运行环境皆为触屏
+      if (isMiniGame) return true;   // 小游戏运行环境皆为触屏
       return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
     },
 
     onResize: function (cb) {
-      if (isWx) { resizeCbs.push(cb); return; }
+      if (isMiniGame) { resizeCbs.push(cb); return; }
       window.addEventListener('resize', cb);
     },
     /** hidden=true 进入后台，hidden=false 回前台（网页 visibilitychange） */
     onVisibilityChange: function (cb) {
-      if (isWx) { visibilityCbs.push(cb); return; }
+      if (isMiniGame) { visibilityCbs.push(cb); return; }
       document.addEventListener('visibilitychange', function () { cb(document.hidden); });
     },
     /** 任意指针/触点按下（音频解锁用：网页 mousedown+touchstart，小游戏触摸总线） */
     onGlobalPointer: function (cb) {
-      if (isWx) { globalPointCbs.push(cb); return; }
+      if (isMiniGame) { globalPointCbs.push(cb); return; }
       document.addEventListener('mousedown', cb);
       document.addEventListener('touchstart', cb, { passive: true });
     },
 
-    hasKeyboard: !isWx,
+    hasKeyboard: !isMiniGame,
     /** URL/启动参数：网页解析 location.search，小游戏取 getLaunchOptionsSync().query */
     getParam: function (name) {
-      if (isWx) {
+      if (isMiniGame) {
         if (!launchQuery) {
-          try { launchQuery = (wx.getLaunchOptionsSync() || {}).query || {}; }
+          try { launchQuery = (host.getLaunchOptionsSync() || {}).query || {}; }
           catch (e) { launchQuery = {}; }
         }
         return launchQuery[name] != null ? String(launchQuery[name]) : null;
@@ -181,10 +203,10 @@
       var m = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
       return m ? decodeURIComponent(m[1]) : null;
     },
-    /** 诊断标题（网页 document.title；小游戏无标题，挂在 wx 对象上供调试器查看） */
+    /** 诊断标题（网页 document.title；小游戏无标题，挂在宿主对象上供调试器查看） */
     setTitle: function (t) {
       if (isWeb) document.title = t;
-      else if (typeof wx !== 'undefined') wx.__PS_TITLE = t;
+      else if (host) host.__PS_TITLE = t;
     },
     /** body class（触屏模式/竖屏提示，网页专用；小游戏锁定横屏，空操作） */
     setBodyClass: function (op, name, on) {
@@ -203,18 +225,23 @@
       }
       return {
         getItem: function (k) {
-          try { var v = wx.getStorageSync(k); return (v === '' || v == null) ? null : String(v); }
+          try { var v = host.getStorageSync(k); return (v === '' || v == null) ? null : String(v); }
           catch (e) { return null; }
         },
-        setItem: function (k, v) { try { wx.setStorageSync(k, String(v)); } catch (e) {} }
+        setItem: function (k, v) { try { host.setStorageSync(k, String(v)); } catch (e) {} }
       };
     },
 
-    /** WebAudio 上下文实例（引擎声/雷达蜂鸣均标准节点，两端同构）；不可用时返回 null */
+    /** WebAudio 上下文实例（引擎声/雷达蜂鸣均标准节点，各端同构）；不可用时返回 null。
+     * 微信 wx.createWebAudioContext 按需新建；抖音 tt.getAudioContext 返回全局单例
+     * （节点 API 同为标准 oscillator/gain/setTargetAtTime，游戏只用到这几类）。 */
     createAudioContext: function () {
-      if (isWx) {
-        try { return wx.createWebAudioContext ? wx.createWebAudioContext() : null; }
-        catch (e) { return null; }
+      if (isMiniGame) {
+        try {
+          if (host.createWebAudioContext) return host.createWebAudioContext();
+          if (host.getAudioContext) return host.getAudioContext();
+          return null;
+        } catch (e) { return null; }
       }
       var AC = (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) || null;
       return AC ? new AC() : null;
@@ -223,7 +250,7 @@
     /** 画布触摸事件（归一化为 {type,touches,changedTouches,preventDefault}）。
      * 网页端挂 canvas 事件；小游戏端无 canvas 事件，注册进全局触摸总线。 */
     onCanvasTouch: function (canvas, h) {
-      if (isWx) { canvasTouchHandlers.push(h); return; }
+      if (isMiniGame) { canvasTouchHandlers.push(h); return; }
       canvas.addEventListener('touchstart', h.start, { passive: false });
       canvas.addEventListener('touchmove', h.move, { passive: false });
       canvas.addEventListener('touchend', h.end, { passive: false });
@@ -241,28 +268,28 @@
     /* ---------- UI 合成钩子（小游戏专用） ----------
      * 小游戏只有一块屏幕画布（WebGL），UI 画在离屏 2D 画布上后作为全屏透明贴图
      * 叠加进主场景。ui_wx.js 注册合成函数，game.js 每帧渲染完主场景后调用 presentOverlay。 */
-    setOverlayRenderer: function (fn) { if (isWx) overlayRenderFn = fn; },
+    setOverlayRenderer: function (fn) { if (isMiniGame) overlayRenderFn = fn; },
     presentOverlay: function (renderer) {
-      if (!isWx || !overlayRenderFn) return;
+      if (!isMiniGame || !overlayRenderFn) return;
       try {
         overlayRenderFn(renderer);
       } catch (e) {
         /* UI 合成错误不再静默：真机缺字/局部不画这类问题会无声流失——存档并一次性弹窗 */
-        if (typeof wx !== 'undefined') {
-          wx.__PS_OVERLAY_ERR = String((e && e.stack) || e);
-          if (!wx.__PS_OVERLAY_SHOWN) {
-            wx.__PS_OVERLAY_SHOWN = 1;
+        if (host) {
+          host.__PS_OVERLAY_ERR = String((e && e.stack) || e);
+          if (!host.__PS_OVERLAY_SHOWN) {
+            host.__PS_OVERLAY_SHOWN = 1;
             try {
-              wx.showModal({ title: 'UI 渲染错误', content: wx.__PS_OVERLAY_ERR.slice(0, 500), showCancel: false });
+              host.showModal({ title: 'UI 渲染错误', content: host.__PS_OVERLAY_ERR.slice(0, 500), showCancel: false });
             } catch (e2) {}
           }
         }
       }
     },
     /** UI 层是否有待绘制内容（闪烁衰减/滚动/按压缩放等）。game.js 的整帧门控据此
-     * 放行：静止菜单无交互时不重渲染（GPU 零负载），一有触摸即恢复合成。 */
-    setOverlayNeedsFrame: function (fn) { if (isWx) overlayNeedsFrameFn = fn; },
-    overlayNeedsFrame: function () { return !!(isWx && overlayNeedsFrameFn && overlayNeedsFrameFn()); }
+     *  放行：静止菜单无交互时不重渲染（GPU 零负载），一有触摸即恢复合成。 */
+    setOverlayNeedsFrame: function (fn) { if (isMiniGame) overlayNeedsFrameFn = fn; },
+    overlayNeedsFrame: function () { return !!(isMiniGame && overlayNeedsFrameFn && overlayNeedsFrameFn()); }
   };
 
   return api;

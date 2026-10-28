@@ -429,11 +429,11 @@
   Game.prototype.applyTouchQuality = function () {
     var q = this.cfg.QUALITY && this.cfg.QUALITY.touch;
     if (!q) return;
-    /* 像素比取 Platform（网页 window.devicePixelRatio / 小游戏 wx.getWindowInfo().pixelRatio）——
+    /* 像素比取 Platform（网页 window.devicePixelRatio / 小游戏宿主 getSystemInfoSync().pixelRatio）——
      * 小游戏环境 window=GameGlobal 上没有 devicePixelRatio，直读会把像素比兜底成 1，真机整屏发糊。
-     * 分端取上限：wx 保持 2（真机合成器偏糊的回调）；网页触屏 1.5 与桌面一致——
+     * 分端取上限：小游戏（wx/tt）保持 2（真机合成器偏糊的回调）；网页触屏 1.5 与桌面一致——
      * 手机 dpr 2~3 的全屏填充率是最弱 GPU 的主要预算 */
-    var prMax = (this.PS.Platform.isWx || !q.pixelRatioMaxWeb) ? q.pixelRatioMax : q.pixelRatioMaxWeb;
+    var prMax = (this.PS.Platform.isMiniGame || !q.pixelRatioMaxWeb) ? q.pixelRatioMax : q.pixelRatioMaxWeb;
     if (prMax) this.renderer.setPixelRatio(Math.min(this.PS.Platform.pixelRatio() || 1, prMax));
     if (q.shadowSize) this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
     if (q.mirrorRtW) this.cfg.QUALITY.mirrorRtW = q.mirrorRtW;
@@ -1039,8 +1039,8 @@
      * resize/回前台/换关由 _frameDirty 强制补帧；playing 中断时遗留的
      * _mirrorsDirty（如暂停中转向灯闪烁沿）会在恢复后的首帧补上。
      * 小游戏端例外：真机 GL 合成器不保证保留未重绘的画布（浏览器才有此语义），
-     * 静止态跳帧在真机上会黑屏——wx 每帧重画（重活仍按需：阴影/镜面 RT/UI 贴图上传） */
-    if (this.state === 'playing' || this.PS.Platform.isWx) this._frameDirty = true;
+     * 静止态跳帧在真机上会黑屏——小游戏端（wx/tt）每帧重画（重活仍按需：阴影/镜面 RT/UI 贴图上传） */
+    if (this.state === 'playing' || this.PS.Platform.isMiniGame) this._frameDirty = true;
     /* 小游戏 canvas UI 有新内容（滚动/按压/闪烁）时也要整帧重画：
      * UI 以全屏贴图叠加在主场景上，主渲染被跳过时叠加会复叠在旧合成之上 */
     if (this.PS.Platform.overlayNeedsFrame()) this._frameDirty = true;

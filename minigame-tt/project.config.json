@@ -1,0 +1,10 @@
+{
+  "appid": "tt0000000000",
+  "projectname": "parking-simulator",
+  "compileType": "game",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "minified": false
+  }
+}

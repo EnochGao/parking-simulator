@@ -1,4 +1,4 @@
-/* js/ui.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+/* js/ui.js · 微信小游戏模块（tools/build_mini.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
 var module, exports, define;                  /* 声明以捕获外层泄露 */
 module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
@@ -19,13 +19,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     /** HUD/全屏界面实例（menu/select/briefing/result/pause/selftest 全套） */
     createHud: function (game, container) {
       var PS = NS(), Wx = wxApi();
-      if (Wx && PS.Platform && PS.Platform.isWx) return Wx.createHud(game);
+      if (Wx && PS.Platform && PS.Platform.isMiniGame) return Wx.createHud(game);
       return PS.Hud.createHud(container);
     },
     /** 虚拟驾驶控件（触屏设备）：实现方负责注册 game._tcSetVisible/_tcFns */
     buildTouchControls: function (game) {
       var PS = NS(), Wx = wxApi();
-      if (Wx && PS.Platform && PS.Platform.isWx) { Wx.buildTouchControls(game); return; }
+      if (Wx && PS.Platform && PS.Platform.isMiniGame) { Wx.buildTouchControls(game); return; }
       game.buildTouchControls();
     },
     /** 虚拟控件显隐（仅驾驶态显示，避免浮在菜单/结算上误触） */

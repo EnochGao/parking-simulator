@@ -15,13 +15,13 @@
     /** HUD/全屏界面实例（menu/select/briefing/result/pause/selftest 全套） */
     createHud: function (game, container) {
       var PS = NS(), Wx = wxApi();
-      if (Wx && PS.Platform && PS.Platform.isWx) return Wx.createHud(game);
+      if (Wx && PS.Platform && PS.Platform.isMiniGame) return Wx.createHud(game);
       return PS.Hud.createHud(container);
     },
     /** 虚拟驾驶控件（触屏设备）：实现方负责注册 game._tcSetVisible/_tcFns */
     buildTouchControls: function (game) {
       var PS = NS(), Wx = wxApi();
-      if (Wx && PS.Platform && PS.Platform.isWx) { Wx.buildTouchControls(game); return; }
+      if (Wx && PS.Platform && PS.Platform.isMiniGame) { Wx.buildTouchControls(game); return; }
       game.buildTouchControls();
     },
     /** 虚拟控件显隐（仅驾驶态显示，避免浮在菜单/结算上误触） */

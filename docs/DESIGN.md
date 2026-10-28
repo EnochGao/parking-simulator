@@ -583,3 +583,37 @@ URL 参数（测试钩子，亦是功能）：
   偏差 0.49m/1.8°，在无 via 直解关里属正常精度档）；demo_paths.js 随烘焙更新，
   物理指纹不变。摆动预算与反直行区间的完整推导注释在 js/levels/challenge.js 关卡头。
 - 回归：node tests/run_all.js 678 项全绿。
+
+## 21. v1.7 变更记录（2026-10-28，抖音小游戏接入·多平台构建）
+
+目标：上架抖音小游戏，同时微信小游戏零回归，并为后续平台（快手/支付宝等）预留扩展位。
+调研结论先行：抖音小游戏运行时与微信几乎同构——`GameGlobal` 全局对象、CommonJS
+`require` 相对路径模块、首块 `tt.createCanvas()` 即上屏画布、`game.json` 字段同形
+（且默认横屏）；包体限制主包 4MB / 总包 20MB（本包 884KB 余量充足）。
+
+- **`js/platform.js` 多宿主桥接**：探测改为 wx → tt → 浏览器三级，全部 `wx.*` 调用
+  改走 `host.*`。公开面新增 `isTt` 与 `isMiniGame`（任意小游戏宿主），业务分支
+  （game.js 画质档/整帧门控、ui.js 调度器）从 `isWx` 改用 `isMiniGame`——平台无关。
+  宿主差异仅三处路由：音频工厂（`wx.createWebAudioContext` 按需新建 ↔
+  `tt.getAudioContext` 全局单例，游戏只用 oscillator/gain 标准节点，两端同构）、
+  窗口尺寸事件（tt 无 `onWindowResize`，锁横屏下以 `onDeviceOrientationChange`
+  兜底刷新窗口信息并触发重排）、窗口信息（tt 无 `getWindowInfo`，一律
+  `getSystemInfoSync`，代码本有该兜底分支）。
+- **`js/progress.js` 存档兜底**：唯一直连 `wx.getStorageSync` 的漏网点改为 wx/tt
+  双探测（platform 未加载时仍可用）。
+- **构建参数化 `tools/build_mini.js`**：TARGETS 目标表（产物目录/宿主全局名/IDE 各自
+  格式的 project.config.json/README），`build_wx.js`、`build_tt.js` 变薄包装等价入口。
+  产物 `minigame/`（微信，真实 appid 经 writeIfAbsent 保留）与 `minigame-tt/`（抖音，
+  appid 占位 tt0000000000 待换）完全同构，差异仅 three.js 垫片里的
+  `createCanvas` 宿主名与入口的 `onError/showModal` 宿主名。新平台 = 目标表加一行 +
+  platform 探测加一行。
+- **测试共享 runner `tests/mini_bundle_test.js`**：wx_bundle_test.js 原 428 行抽为
+  目标参数化 runner，wx/tt 薄包装各指定宿主。tt mock 按真实 API 面塑造（无
+  getWindowInfo/onWindowResize、getAudioContext 单例），并新增宿主路由断言（音频工厂
+  分支、存储映射同步 KV）。两端各 99 项全绿；全量回归 753 项、后视镜审计 37 项、
+  拐弯门禁全绿。
+- **踩坑**：platform.js 块注释里写了 `onTouch*/`——`*/` 把注释提前终止，下一行成
+  裸代码，冒烟测试"加载即崩"当场抓出（这正是每端都跑 bundle 冒烟的价值）。
+- **抖音侧待办**（非代码）：换正式 appid、软著（可与微信复用）、小游戏备案、必接
+  能力（客服/敏感词/侧边栏复访）；真机验证 WebGL1 上下文、tt.getAudioContext 节点
+  行为与音频解锁时机、双指拧镜头触摸形状。
