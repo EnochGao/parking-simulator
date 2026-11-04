@@ -89,6 +89,36 @@
       Math.abs(stripe.position.x) < 1e-9 && Math.abs(stripe.position.y - 0.175) < 1e-9,
       stripe ? ('x=' + stripe.position.x.toFixed(3) + ' y=' + stripe.position.y.toFixed(3)) : '缺失');
 
+    /* ---- 车内视角鼠标拖盘：接手当前盘位 → 顺时针拖拽=右转 → 物理跟轮 → 松手保持 ---- */
+    var wc = g.wheelScreenCenter();
+    var cnv = g.renderer.domElement.getBoundingClientRect();
+    check('抓盘：空白处按下不接管', !g.wheelGrabAt(cnv.left + cnv.width * 0.92, cnv.top + cnv.height * 0.08));
+    /* 此处物理转角仍为上一段的 1/3 左舵：抓盘须从盘的实际位置接管（模拟量同步为当前盘位） */
+    check('抓盘：盘心命中并接管', g.wheelGrabAt(wc.x, wc.y) === true);
+    check('抓盘：模拟量接手当前盘位（1/3 左舵 → +1/3）',
+      Math.abs(g.touchAnalog.steer - g.carP.steer / CAR.maxSteer) < 1e-9, String(g.touchAnalog.steer.toFixed(3)));
+    g.wheelRelease();
+    g.carP.steer = 0; g.touchAnalog.steer = 0;   // 回正后重抓，测拖拽主链路
+    check('重抓：起点回正 → 模拟量 0', g.wheelGrabAt(wc.x, wc.y) === true && g.touchAnalog.steer === 0);
+    /* 绕盘心顺时针拉 90°（屏幕 y 向下，顺时针=极角增大）→ 模拟量 -1/3 → 前轮右转 12°。
+     * 首个触点就在盘心（极角发散）：该事件只建立参考点，后续顺时针增量正常累积 */
+    g.wheelDragTo(wc.x, wc.y + 120);
+    g.wheelDragTo(wc.x - 120, wc.y + 120);
+    g.wheelDragTo(wc.x - 120, wc.y);
+    check('拖盘：顺时针拖拽写入负模拟量（右转）', g.touchAnalog.steer < -0.3,
+      String(g.touchAnalog.steer.toFixed(3)));
+    var steerDeg0 = g.carP.steer / D2R;
+    for (i = 0; i < 30; i++) g.stepPhysics();   // 0.5s：前轮朝 -12° 打到位
+    check('拖盘：前轮跟随模拟量右转（' + steerDeg0.toFixed(1) + '°→' + (g.carP.steer / D2R).toFixed(1) + '°）',
+      g.carP.steer < -8 * D2R, deg(g.carP.steer));
+    g.wheelRelease();
+    var held = g.touchAnalog.steer;
+    g.wheelDragTo(wc.x + 200, wc.y);          // 松手后拖拽必须无效
+    check('松手：保持转角且拖拽不再生效', g._wheelDrag === null && g.touchAnalog.steer === held);
+    for (i = 0; i < 60; i++) g.stepPhysics();   // 再走 1s：转角不因无输入而变（holdSteer）
+    check('松手：前轮维持右转不自动回正', g.carP.steer < -8 * D2R, deg(g.carP.steer));
+    g.touchAnalog.steer = 0;                    // 清理模拟量（"还原"段回正物理转角）
+
     /* ---- 还原 ---- */
     g.carP.steer = 0; g.updateVisuals(FRAME);
 

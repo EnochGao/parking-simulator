@@ -109,6 +109,22 @@
         var r0 = Math.sqrt(dx0 * dx0 + dy0 * dy0), r1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
         return da * Math.min(1, Math.min(r0, r1) / this.dragSoftPx);
       }
+    },
+    VIEW_WHEEL: {
+      maxDeg: 270,   // 满舵盘角（°）：前轮满舵 36° × steerVisualRatio，触屏/鼠标方向盘与座舱盘圈数 1:1
+      /* 前后两次触点绕盘心的屏幕极角差（°，跨 ±180° 由 wrap 兜底）。
+       * 触屏虚拟方向盘与车内视角鼠标拖拽共用同一映射——两端打轮手感一致 */
+      deltaDeg: function (a0, a1) {
+        var d = a1 - a0;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+      },
+      /* 盘角累积并钳到 ±maxDeg（抓轮跟手累积，满舵钳制） */
+      accumulate: function (angleDeg, dDeg) {
+        var a = angleDeg + dDeg, m = this.maxDeg;
+        return a > m ? m : (a < -m ? -m : a);
+      }
     }
   };
   /** 物理指纹：CAR+PHYS 的稳定哈希（键序无关）。tools/solver.js 烘焙 demo_paths.js 时

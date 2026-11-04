@@ -656,6 +656,21 @@ section('触屏方向盘');
   check('方向盘：全部回中后恢复 holdSteer', s5.holdSteer === true);
 })();
 
+/* ---------------- 16b. 方向盘拖拽映射（VIEW_WHEEL：触屏虚拟盘与鼠标拖盘共用） ---------------- */
+section('方向盘拖拽映射');
+(function () {
+  var VW = CFG.VIEW_WHEEL;
+  check('映射：满舵角 270°（与座舱传动比 270/36 同源）', VW.maxDeg === 270);
+  check('映射：同向角差原样返回', VW.deltaDeg(30, 60) === 30);
+  check('映射：跨 ±180° 跳变收拢（170°→-170° 应为 +20°，不反向甩盘）',
+    approx(VW.deltaDeg(170, -170), 20) && approx(VW.deltaDeg(-170, 170), -20));
+  check('映射：累积增量', approx(VW.accumulate(100, 45), 145));
+  check('映射：满舵右钳制', VW.accumulate(260, 45) === 270);
+  check('映射：满舵左钳制', VW.accumulate(-260, -45) === -270);
+  check('映射：符号约定——顺时针（极角增大）为负模拟量=右转',
+    approx(-VW.accumulate(0, 90) / VW.maxDeg, -1 / 3));
+})();
+
 /* ---------------- 17. 复盘回放（recorder/tape 确定性，v2 项） ---------------- */
 section('复盘回放');
 (function () {
