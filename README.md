@@ -95,7 +95,17 @@ npm run audit:mirror      # 后视镜/倒车影像几何审计（GB 15084 / UN R
 npm run turn              # 拐弯真实性数值检查（断言化门禁，偏差超阈值即失败退出）
 npm run solver            # （调物理参数后）重新求解各关标准答案路径
 npm start                 # 启动本地服务器（node tools/server.js 8137）
+npm run build:wx          # 生成微信小游戏工程 minigame/（微信开发者工具「导入项目」）
+npm run test:wx           # 微信小游戏包 mock 冒烟（99 项，无需开发者工具）
+npm run build:tt          # 生成抖音小游戏工程 minigame-tt/（抖音开发者工具「导入项目」）
+npm run test:tt           # 抖音小游戏包 mock 冒烟（99 项，按 tt 真实 API 面模拟）
 ```
+
+**小游戏多平台**：微信/抖音两个包同源生成（共享构建 `tools/build_mini.js`，目标表加一行
+即可扩新平台），宿主差异全部收口在 `js/platform.js`——微信 `wx.*` 与抖音 `tt.*` 绝大多数
+接口同名同义，仅音频工厂（`createWebAudioContext` ↔ `getAudioContext`）、窗口尺寸事件
+（`onWindowResize` ↔ `onDeviceOrientationChange` 兜底）、`getWindowInfo`（tt 无）三处路由。
+上架流程（软著/备案/提审）见各产物目录 README。
 
 **v1.5 新特性**：触屏模拟量方向盘（抓轮缘旋转与真车同向：顺时针=右转，±270° 满打（与座舱方向盘圈数 1:1）、松手保持、双击回正，替换 ◀▶ 数字键；按住左镜/右镜转头看镜，调镜面板触屏化（V 模式））；
 车内视角鼠标拖方向盘打轮（射线抓取 3D 方向盘绕盘心拖动，映射/通道与触屏虚拟盘一致：±270° 满打、松手保持转角，悬停显示抓手光标）；
@@ -121,7 +131,7 @@ Node/浏览器双端同构模块，`tests/run_all.js` 与浏览器 `?selftest=al
 | 数据 | `levels.js` / `demo_paths.js` / `progress.js` | 关卡数据；标准答案控制段（工具产物）；进度与存档（解锁链/续玩/落档） |
 | 输入 | `input.js` / `gamepad.js` | 可替换输入源（键盘+触屏方向盘模拟量+手柄合并，逐帧录像/复盘回放）与手柄轮询 |
 | 表现 | `carRig.js` / `cockpit.js` / `carModel.js` / `world.js` / `assist.js` / `hud.js` | 整车装配与单车表现、座舱、场景、辅助、纯视图 UI |
-| 平台 | `platform.js` / `ui.js` / `ui_wx.js` / `sw.js` | 双端平台抽象（浏览器/微信小游戏）、UI 调度与 canvas 实现、PWA 离线 |
+| 平台 | `platform.js` / `ui.js` / `ui_wx.js` / `sw.js` | 多端平台抽象（浏览器/微信/抖音小游戏，宿主差异收口）、UI 调度与 canvas 实现、PWA 离线 |
 | 自测 | `mirror_check.js` / `cockpit_check.js` | 浏览器渲染回读自测（`?mirrortest=1` / `?cockpittest=1`） |
 | 壳 | `game.js` / `main.js` | 渲染器/主循环/状态机/界面流转 |
 

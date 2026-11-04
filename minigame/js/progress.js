@@ -1,4 +1,4 @@
-/* js/progress.js · 微信小游戏模块（tools/build_wx.js 生成，勿手改） */
+/* js/progress.js · 微信小游戏模块（tools/build_mini.js 生成，勿手改） */
 var window = GameGlobal, self = GameGlobal;   /* UMD 根 → 跨模块共享全局 */
 var module, exports, define;                  /* 声明以捕获外层泄露 */
 module = exports = define = undefined;        /* 强制浏览器分支（var 对参数式包装无效） */
@@ -16,15 +16,19 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
   function defaultStorage() {
     try { if (typeof localStorage !== 'undefined') return localStorage; } catch (e) {}
-    /* 微信小游戏：无 localStorage，映射同步 KV 为同形接口（getItem/setItem 字符串语义） */
+    /* 小游戏宿主（微信 wx / 抖音 tt）：无 localStorage，映射同步 KV 为同形接口
+     * （getItem/setItem 字符串语义）。platform.js 未加载时（Node 单测）此处自探测 */
     try {
-      if (typeof wx !== 'undefined' && wx.getStorageSync) {
+      var mg = null;
+      if (typeof wx !== 'undefined' && wx.getStorageSync) mg = wx;
+      else if (typeof tt !== 'undefined' && tt.getStorageSync) mg = tt;
+      if (mg) {
         return {
           getItem: function (k) {
-            try { var v = wx.getStorageSync(k); return (v === '' || v == null) ? null : String(v); }
+            try { var v = mg.getStorageSync(k); return (v === '' || v == null) ? null : String(v); }
             catch (e) { return null; }
           },
-          setItem: function (k, v) { try { wx.setStorageSync(k, String(v)); } catch (e) {} }
+          setItem: function (k, v) { try { mg.setStorageSync(k, String(v)); } catch (e) {} }
         };
       }
     } catch (e) {}

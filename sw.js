@@ -63,6 +63,11 @@ self.addEventListener('activate', function (e) {
 
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
+  /* /assets/models/ 是编辑器里的开发预览资产（可以随时重新生成），
+   * 不进缓存：否则改了模型/查看器后仍会被旧缓存顶回去。 */
+  try {
+    if (new URL(e.request.url).pathname.indexOf('/assets/models/') === 0) return;
+  } catch (err) { /* 非标准 URL 交给默认流程 */ }
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(function (hit) {
       if (hit) return hit;

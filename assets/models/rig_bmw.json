@@ -1,0 +1,31 @@
+{
+  "_note": "BMW 1M 拆件规格：坐标是源模型（ac_-_bmw_1m_free.glb，未缩放）的世界坐标，单位为米。",
+  "extract": [
+    {
+      "from": "polymsh_detached29_SUB1_LIVREA_0",
+      "name": "Mirror_L",
+      "center": [1.04, 1.18, 0.48],
+      "radius": 0.18,
+      "pivot": [0.93, 1.18, 0.48],
+      "axis": "Y",
+      "attach": ["polymsh_detached29_SUB2_MIRROR_0"]
+    },
+    {
+      "from": "polymsh62_SUB1_LIVREA_0",
+      "name": "Mirror_R",
+      "center": [-1.04, 1.18, 0.48],
+      "radius": 0.18,
+      "pivot": [-0.93, 1.18, 0.48],
+      "axis": "Y",
+      "attach": ["polymsh62_SUB3_MIRROR_0"]
+    }
+  ],
+  "pivot": [
+    {
+      "node": "polymsh258_SUB1_INT_Plaastica_NERA_0",
+      "name": "SteeringWheel",
+      "pivot": [0.42, 1.02, 0.28],
+      "axis": "Z"
+    }
+  ]
+}
