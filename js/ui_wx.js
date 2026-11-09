@@ -14,7 +14,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   /* 配色（移植 style.css） */
   var C = {
-    bg: '#14161a', panelA: '#1d2129', panelB: '#15171c', border: '#3a3f4a',
+    panelA: '#1d2129', panelB: '#15171c', border: '#3a3f4a',
     text: '#e8eaee', dim: '#9aa2b1', faint: '#79808e',
     gold: '#ffd76a', green: '#6fd66f', greenA: '#2f9e5a', greenB: '#227a44',
     warn: '#ff7a66', orange: '#ff9d5c', hint: '#ffe9a8', blue: '#9fc6e8',
@@ -74,7 +74,7 @@
       dirty: true,
       hud: {
         visible: false, levelName: '', task: '', time: 0, coll: 0, collMax: 5,
-        gear: 'D', speed: 0, radarLv: 0, radarRange: 2.5, hint: '', assist: '',
+        gear: 'D', speed: 0, radarLv: 0, hint: '', assist: '',
         audioOn: true, flash: 0, audioRect: null
       },
       screen: null,                   // {kind,model,widgets:[{x,y,w,h,cb,locked}],viewY,viewH,contentH}
@@ -88,7 +88,6 @@
     PLAT.onResize(ensureSize);
     PLAT.onCanvasTouch(cur.canvas, { start: onTouchStart, move: onTouchMove, end: onTouchEnd });
     PLAT.setOverlayRenderer(presentOverlay);
-    PLAT.setOverlayNeedsFrame(function () { return true; });   /* 贴图每帧重传（见 presentOverlay 注释），恒需渲染帧 */
     return cur;
   }
 
@@ -122,7 +121,6 @@
   function drawHud(ctx) {
     var u = cur, W = u.W, H = u.H, h = u.hud, ins = u.insets;
     var touch = u.tc.visible;
-    var pad = touch ? 8 : 14;
 
     /* 顶栏：左任务 / 右状态 */
     var topY = Math.max(12, ins.top + 6);
@@ -185,8 +183,8 @@
     ctx.textBaseline = 'middle'; ctx.fillText(h.gear, kx, botY + chH / 2); kx += gearW + 18;
     f(ctx, fs, 'bold'); ctx.fillStyle = C.text; ctx.fillText('' + h.speed, kx, botY + chH / 2 - 1); kx += speedW;
     f(ctx, 11); ctx.fillStyle = 'rgba(232,234,238,.6)'; ctx.fillText('km/h', kx, botY + chH / 2 + 6); kx += touch ? 34 : 44;
-    for (var i = 0; i < 4; i++) {   // 雷达距离格：从右往左点亮（近端橙、远端绿）
-      var bx = kx + i * (rw + 5);
+    for (var i = 0; i < 4; i++) {   // 雷达距离格：从右往左点亮（近端橙、远端绿）——格 0 在最右，与网页版 row-reverse 同向
+      var bx = kx + (3 - i) * (rw + 5);
       ctx.fillStyle = i < h.radarLv ? (i >= 2 ? '#e2701d' : '#2fae4a') : '#2c3038';
       rr(ctx, bx, botY + (chH - rh) / 2, rw, rh, 3); ctx.fill();
     }
@@ -230,7 +228,7 @@
      * 曾未跳过而被 drawButton 以不透明空标签底重涂，卡片编号/名称/星星全部被盖（"选关全空"） */
     for (var i = 0; i < s.widgets.length; i++) {
       var w = s.widgets[i];
-      if (w.hidden || w.card) continue;
+      if (w.card) continue;
       drawButton(ctx, w, u.pressed && u.pressed.widget === w);
     }
     ctx.restore();
@@ -312,10 +310,11 @@
         ctx.textBaseline = 'alphabetic';
         ctx.fillText(lv.id.replace('lv', ''), x + it.w / 2, y + 20);
         f(ctx, 14); ctx.fillStyle = dark ? '#767e8c' : C.text;
-        var nameLines = wrap(ctx, lv.name, it.w - 16).slice(0, 2);
-        ctx.fillText(nameLines.join(' '), x + it.w / 2, y + 44);
+        /* 卡名换行按卡宽只量一次（卡宽/字号在本界面生命周期内恒定；滚动每帧重绘不再逐字 measureText） */
+        if (it.nameText == null) it.nameText = wrap(ctx, lv.name, it.w - 16).slice(0, 2).join(' ');
+        ctx.fillText(it.nameText, x + it.w / 2, y + 44);
         f(ctx, 14); ctx.fillStyle = dark ? '#8a7440' : C.gold;
-        ctx.fillText(it.stars ? stars(it.stars) : '☆☆☆', x + it.w / 2, y + 68);
+        ctx.fillText(stars(it.stars), x + it.w / 2, y + 68);
         f(ctx, 11);
         if (dark) {
           ctx.fillStyle = '#5a6270';
@@ -347,8 +346,10 @@
         ctx.fillStyle = C.hint;
         tb.lines.forEach(function (ln, j) { ctx.fillText(ln, m.x + 84, m.y + tb.y + 16 + j * 24); });
       });
+      /* 可通过碰撞数 = 失败上限 - 1（opts.maxColl 源自 SCORE.maxCollisions，与 DOM 简报同源） */
+      var passColl = (s.model.maxColl || 5) - 1;
       f(ctx, 13); ctx.fillStyle = C.faint; ctx.textAlign = 'center';
-      ctx.fillText('标准用时 ' + lv.par + ' 秒 · 碰撞 ≤4 次仍可通过，剐蹭会扣分',
+      ctx.fillText('标准用时 ' + lv.par + ' 秒 · 碰撞 ≤' + passColl + ' 次仍可通过，剐蹭会扣分',
         m.x + m.w / 2, m.y + s.model.metaY + 14);
       ctx.textAlign = 'left';
     },
@@ -377,14 +378,13 @@
     selftest: function (ctx, s, m) {
       f(ctx, 20, 'bold'); ctx.fillStyle = C.text; ctx.textAlign = 'center';
       ctx.fillText('全关卡自动驾驶回归 ' + (s.model.allPass ? '— 全部通过 ✓' : '— 存在失败 ✗'), m.x + m.w / 2, m.y + 36);
-      f(ctx, 13);
       var lines = s.model.lines;
       for (var i = 0; i < lines.length; i++) {
         var ly = m.y + 70 + i * 26;
         ctx.textAlign = 'left'; ctx.fillStyle = lines[i][0] ? C.green : C.warn;
-        ctx.font = 'bold 13px ' + FONT;
+        f(ctx, 13, 'bold');
         ctx.fillText(lines[i][0] ? 'PASS' : 'FAIL', m.x + 30, ly);
-        ctx.fillStyle = C.text; ctx.font = '13px ' + FONT;
+        ctx.fillStyle = C.text; f(ctx, 13);
         ctx.fillText(lines[i][1], m.x + 84, ly);
       }
       ctx.textAlign = 'left';
@@ -410,8 +410,7 @@
   function syncContentH(s) {   // 内容底边超出面板时扩容 contentH（启用滚动）
     var bottom = 0;
     for (var i = 0; i < s.widgets.length; i++) bottom = Math.max(bottom, s.widgets[i].y + s.widgets[i].h - s.model.y);
-    var extra = s.model.extraH || 0;
-    s.contentH = Math.max(s.model.h, bottom + extra);
+    s.contentH = Math.max(s.model.h, bottom);
     s.viewH = s.model.h;
     s.viewY = Math.max(0, Math.min(s.viewY, s.contentH - s.viewH));
   }
@@ -438,7 +437,7 @@
     var m = s.model;
     s.model.helpY = helpY;
     stack.forEach(function (b) { btn(s, b.label, (m.w - b.w) / 2, b.y, b.w, b.h, b.cb, b.big); });
-    s.contentH = contentH; s.viewH = m.h;
+    s.contentH = contentH;
     cur.dirty = true;
   }
 
@@ -474,19 +473,18 @@
     /* 布局坐标以面板内相对坐标重算（beginScreen 可能压高了面板 → 缩进滚动区） */
     var m = s.model;
     s.model.items = model.items;
-    s.model.contentScaleY = 1;
-    /* 卡片即 widgets（locked 不响应） */
+    /* 卡片即 widgets（未解锁卡片无 cb，命中测试自动跳过） */
     model.items.forEach(function (mi) {
       if (mi.head) return;
       s.widgets.push({
         x: m.x + mi.x, y: m.y + mi.y, w: mi.w, h: mi.h,
-        label: '', card: mi, locked: !mi.unlocked,
+        label: '', card: mi,
         cb: mi.unlocked ? (function (lv) { return function () { onPick(lv); }; })(mi.lv) : null,
-        big: false, hidden: false
+        big: false
       });
     });
     btn(s, '返回', (m.w - 200) / 2, backY, 200, 44, onBack);
-    s.contentH = contentH; s.viewH = m.h;
+    s.contentH = contentH;
     cur.dirty = true;
   }
 
@@ -526,9 +524,10 @@
     s.model.goalY = goalY;
     s.model.tipBlocks = tipBlocks;
     s.model.metaY = metaY;
+    s.model.maxColl = opts && opts.maxColl;
     btn(s, '开始', (m.w - 300) / 2, goY, 300, 48, onStart, true);
     btn(s, '返回选关', (m.w - 260) / 2, backY, 260, 44, onBack);
-    s.contentH = contentH; s.viewH = m.h;
+    s.contentH = contentH;
     cur.dirty = true;
   }
 
@@ -566,12 +565,12 @@
       btn(s, names[i], x0, by, bw, 46, cbs[i], bigs[i]);
       x0 += bw + 10;
     }
-    s.contentH = contentH; s.viewH = m.h;
+    s.contentH = contentH;
     cur.dirty = true;
   }
 
   function showPause(onResume, onRetry, onMenu) {
-    var W = cur.W, H = cur.H;
+    var H = cur.H;
     var s = beginScreen('pause', 360, Math.min(320, H - 20));
     var m = s.model;
     btn(s, '继续', (m.w - 260) / 2, 84, 260, 48, onResume, true);
@@ -587,7 +586,7 @@
     var s = beginScreen('selftest', pw, Math.min(contentH, cur.H - 16));
     s.model.lines = lines;
     s.model.allPass = allPass;
-    s.contentH = contentH; s.viewH = s.model.h;
+    s.contentH = contentH;
     cur.dirty = true;
   }
 
@@ -597,7 +596,7 @@
     if (!cur || !cur.tc.buttons.length) return;
     var H = cur.H, W = cur.W, ins = cur.insets;
     var L = 16 + ins.left, R = W - 16 - ins.right, B = H - 24 - ins.bottom;
-    var doneY = 0;
+    var doneY = 0;   // 完成钮面板内纵坐标（mirrorBounds 高度基准；buildTouchControls 保证 mdone 恒存在）
     cur.tc.buttons.forEach(function (b) {
       switch (b.id) {
         case 'wheel': b.w = b.h = 124; b.x = L; b.y = H - 34 - ins.bottom - 124; break;   // 底部留 34px 给"双击回正"小字
@@ -651,7 +650,7 @@
           break;
       }
     });
-    cur.tc.mirrorBounds = { x: W / 2 - 182, y: 64 + ins.top, w: 364, h: (doneY || 356) + 52 - (64 + ins.top) };
+    cur.tc.mirrorBounds = { x: W / 2 - 182, y: 64 + ins.top, w: 364, h: doneY + 52 - (64 + ins.top) };
     cur.dirty = true;
   }
 
@@ -672,7 +671,7 @@
       var b = bs[i];
       if (!tcBtnVisible(b)) continue;
       if (b.id === 'wheel') { drawWheel(ctx, b); continue; }
-      if (b.grp === 'mirror' && b.id !== 'mdone') b.on = b.cb ? (cur.game.mirrorSel === ({ m1: 0, m2: 1, m3: 2 })[b.id]) : b.on;
+      if (b.sel != null) b.on = cur.game.mirrorSel === b.sel;   // 选镜 chip 高亮跟随当前选中镜
       var done = b.id === 'mdone';
       var rect = b.grp === 'mirror';   // 调镜组全部圆角矩形：chips + 完成钮（完成钮此前落圆形分支，被画成 φ=w 的正圆）
       if (rect) {
@@ -705,7 +704,7 @@
     }
   }
 
-  /** 模拟量方向盘：轮缘 + 三辐条随拖动旋转，±135°=满打，双击回正 */
+  /** 模拟量方向盘：轮缘 + 双幅辐条/胶囊轮毂随拖动旋转，±270°=满打，双击回正 */
   function drawWheel(ctx, b) {
     var cx = b.x + b.w / 2, cy = b.y + b.h / 2, r = b.w / 2;
     var active = Math.abs(b.angle) > 2;
@@ -744,6 +743,12 @@
     var dx = p.x - (b.x + b.w / 2), dy = p.y - (b.y + b.h / 2);
     return dx * dx + dy * dy <= (b.w / 2) * (b.w / 2);
   }
+  /** 虚拟控件命中：调镜面板的选镜 chips 与完成钮按圆角矩形绘制，须按矩形判定——
+   *  按 φ=宽 的圆判定时竖向溢出到相邻方向钮（点 ▼ 下半误触"完成"退出面板、
+   *  点 ▲ 上沿误选右外镜）；其余控件（驾驶/看镜/功能钮、方向钮）沿用圆形判定 */
+  function hitTc(b, p) {
+    return b.grp === 'mirror' && !b.pad ? hit(b, p) : hitCircle(b, p);
+  }
   /** 触点相对方向盘中心的角度（度，屏幕坐标系顺时针为正）——抓轮缘旋转用 */
   function wheelPtAngle(p, wheel) {
     return Math.atan2(p.y - (wheel.y + wheel.h / 2), p.x - (wheel.x + wheel.w / 2)) * 180 / Math.PI;
@@ -759,7 +764,7 @@
         var wgt = null;
         for (var j = 0; j < cur.screen.widgets.length; j++) {
           var w = cur.screen.widgets[j];
-          if (!w.hidden && !w.locked && w.cb && hit(w, p, cur.screen.viewY)) { wgt = w; break; }
+          if (w.cb && hit(w, p, cur.screen.viewY)) { wgt = w; break; }
         }
         if (wgt) cur.pressed = { id: id, widget: wgt, x: p.x, y: p.y, moved: 0 };
         else cur.drag = { id: id, y: p.y, viewY: cur.screen.viewY };
@@ -782,7 +787,7 @@
         for (var k = 0; k < bs.length; k++) {
           var b = bs[k];
           if (b.id === 'wheel' || !tcBtnVisible(b)) continue;
-          if (!hitCircle(b, p)) continue;
+          if (!hitTc(b, p)) continue;
           if (b.drive || b.pad) {
             b.held = true;
             cur.tc.holds[id] = b;
@@ -797,25 +802,21 @@
           cur.dirty = true;
           break;
         }
-        /* HUD 音效 chip（无全屏界面时） */
-        if (!cur.pressed && cur.hud.visible && cur.hud.audioRect) {
-          var a = cur.hud.audioRect;
-          if (p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h) {
-            if (cur.hudApi && cur.hudApi.onAudioToggle) cur.hudApi.onAudioToggle();
-          }
+        /* HUD 音效 chip（无全屏界面时）：命中与否同时决定是否让位于俯视镜头拖拽 */
+        var onAudio = !!(cur.hud.visible && cur.hud.audioRect && hit(cur.hud.audioRect, p));
+        if (!cur.pressed && onAudio) {
+          if (cur.hudApi && cur.hudApi.onAudioToggle) cur.hudApi.onAudioToggle();
         }
         /* 俯视空白处单指抓转调镜头（与 PC 鼠标拖拽同一 dragRad 极角映射）：该指未命中
          * 任何控件/HUD音效chip 才启动；拖拽期间按住驾驶键不受影响（多点各键独立） */
-        var ar = cur.hud.visible && cur.hud.audioRect ? cur.hud.audioRect : null;
-        var grabbed = (ar && p.x >= ar.x && p.x <= ar.x + ar.w && p.y >= ar.y && p.y <= ar.y + ar.h) ||
+        var grabbed = onAudio ||
           !!cur.tc.holds[id] || (cur.pressed && cur.pressed.id === id) ||
           (cur.tc.wheelGrab && cur.tc.wheelGrab.id === id);
         if (!grabbed && ev.touches.length === 1 && cur.game.state === 'playing' &&
             cur.game.assist && cur.game.assist.top)
           cur.tc.camDrag = { id: id, x: p.x, y: p.y };
       } else if (cur.hud.visible && cur.hud.audioRect) {   // 键盘设备菜单态等边缘情形
-        var a2 = cur.hud.audioRect;
-        if (p.x >= a2.x && p.x <= a2.x + a2.w && p.y >= a2.y && p.y <= a2.y + a2.h) {
+        if (hit(cur.hud.audioRect, p)) {
           if (cur.hudApi && cur.hudApi.onAudioToggle) cur.hudApi.onAudioToggle();
         }
       }
@@ -833,12 +834,12 @@
         var g = cur.tc.wheelGrab, wheel = null, bs2 = cur.tc.buttons;
         for (var w = 0; w < bs2.length; w++) if (bs2[w].id === 'wheel') { wheel = bs2[w]; break; }
         if (wheel) {
-          var a = wheelPtAngle(p, wheel), d = a - g.a;
-          if (d > 180) d -= 360;    // 跨 ±π 跳变保护
-          if (d < -180) d += 360;
+          /* 盘角累积/钳制/模拟量换算统一走 config.VIEW_WHEEL（与网页版触屏盘/3D 盘共用同一映射单源） */
+          var VW = cur.game.cfg.VIEW_WHEEL;
+          var a = wheelPtAngle(p, wheel);
+          wheel.angle = VW.accumulate(wheel.angle, VW.deltaDeg(g.a, a));
           g.a = a;
-          wheel.angle = Math.max(-270, Math.min(270, wheel.angle + d));
-          cur.game.touchAnalog.steer = -wheel.angle / 270;
+          cur.game.touchAnalog.steer = -wheel.angle / VW.maxDeg;
           cur.dirty = true;
         }
       } else if (cur.pressed && cur.pressed.id === id) {
@@ -886,7 +887,7 @@
       if (cur.pressed && cur.pressed.id === id) {
         var w = cur.pressed.widget;
         var ok = cur.pressed.moved < 14;   // 滑动超阈值视为取消（滚动误触保护）
-        if (ok && cur.pressed.round) ok = hitCircle(w, p);
+        if (ok && cur.pressed.round) ok = hitTc(w, p);
         else if (ok && cur.screen) ok = hit(w, p, cur.screen.viewY);
         cur.pressed = null;
         cur.dirty = true;
@@ -944,7 +945,6 @@
       sc.add(mesh);
       overlay = { tex: tex, cam: cam, scene: sc };
     }
-    if (overlay.tex.image !== cur.canvas) overlay.tex.image = cur.canvas;
     if (cur.dirty) { cur.dirty = false; drawAll(); }
     overlay.tex.needsUpdate = true;
     var prevAuto = renderer.autoClear;
@@ -996,7 +996,6 @@
       },
       showPause: function (onResume, onRetry, onMenu) { showPause(onResume, onRetry, onMenu); },
       showSelftest: function (lines, allPass) { showSelftest(lines, allPass); },
-      showScreen: function () { /* DOM 版内部接口，canvas 版由 show* 直接构建 */ },
       hideScreen: function () { cur.screen = null; cur.dirty = true; }
     };
     cur.hudApi = api;
@@ -1038,7 +1037,7 @@
     /* 后视镜调节面板（调节模式下替换驾驶控件）：选镜 chips + 按住方向钮 + 完成。
      * 方向钮直写 keys——调节模式 game.adjustMirrors 消费同一键位 */
     function mirrorChip(id, label, sel) {
-      tc.buttons.push({ id: id, label: label, grp: 'mirror', cb: function () { game.mirrorSel = sel; }, x: 0, y: 0, w: 104, h: 42 });
+      tc.buttons.push({ id: id, label: label, grp: 'mirror', sel: sel, cb: function () { game.mirrorSel = sel; }, x: 0, y: 0, w: 104, h: 42 });
     }
     function padArrow(id, label, key) {
       tc.buttons.push({ id: id, label: label, cap: '', grp: 'mirror', key: key, pad: true, held: false, on: false, x: 0, y: 0, w: 54, h: 54 });
@@ -1058,8 +1057,7 @@
       m: { setOn: function (on) { m.on = on; cur.dirty = true; } },
       c: { setOn: function (on) { c.on = on; cur.dirty = true; } }
     };
-    tc.visible = false;
-    cur.dirty = true;
+    /* tc.visible 初始即 false（tc 字面量），_tcSetVisible(false) 由 game.loadLevel 显示前统一调度 */
   }
 
   /** 释放所有按住态（进入/退出调节模式时防键位卡死） */

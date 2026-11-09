@@ -93,11 +93,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       stopTime: 1.5,        // 停稳判定时长
       maxCollisions: 5      // 强制失败碰撞数
     },
-    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 100, near: 0.12, far: 220 },
+    VIEW: { fov: 72, mirrorFov: 40, inMirrorFov: 30, revFov: 100 },
     // fov: 主相机垂直视场角（72°接近真实车内透视）；mirrorFov/inMirrorFov/revFov 统一为
     // "垂直视场角"约定，渲染宽高比取各自镜面/屏面的实际宽高比（见 cockpit.js），
     // 内镜 3.2:1 扁长镜片因此呈现宽幅后窗视野而非水平拉伸画面；
-    // revFov 100（水平≈130°）：对标真实倒车影像的广角（130°+），保证车尾后 0.3m 起近地可见
+    // revFov 100（水平≈130°）：对标真实倒车影像的广角（130°+），保证车尾后 0.3m 起近地可见。
+    // 近/远裁剪面不走本节：主相机 0.12/220（game.js）、镜相机 0.3/160 与倒影相机 0.4/60
+    // （cockpit.js）各自按场景标定，无共享值可单源
     VIEW_TOP: {
       rotateRate: 2.4,   // 手动旋转速率（rad/s，≈140°/s）：键盘 ,/. 与手柄 LB/RB 按住持续旋转
       dragSoftPx: 70,    // 拖拽软半径（px）：抓点距屏心更近时角速度按 r/值 线性衰减（极角在圆心发散，防抖）
@@ -112,6 +114,22 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         if (da < -Math.PI) da += 2 * Math.PI;
         var r0 = Math.sqrt(dx0 * dx0 + dy0 * dy0), r1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
         return da * Math.min(1, Math.min(r0, r1) / this.dragSoftPx);
+      }
+    },
+    VIEW_WHEEL: {
+      maxDeg: 270,   // 满舵盘角（°）：前轮满舵 36° × steerVisualRatio，触屏/鼠标方向盘与座舱盘圈数 1:1
+      /* 前后两次触点绕盘心的屏幕极角差（°，跨 ±180° 由 wrap 兜底）。
+       * 触屏虚拟方向盘与车内视角鼠标拖拽共用同一映射——两端打轮手感一致 */
+      deltaDeg: function (a0, a1) {
+        var d = a1 - a0;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+      },
+      /* 盘角累积并钳到 ±maxDeg（抓轮跟手累积，满舵钳制） */
+      accumulate: function (angleDeg, dDeg) {
+        var a = angleDeg + dDeg, m = this.maxDeg;
+        return a > m ? m : (a < -m ? -m : a);
       }
     }
   };

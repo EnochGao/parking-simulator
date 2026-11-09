@@ -24,6 +24,8 @@ var server = http.createServer(function (req, res) {
   // path.relative 判边界：startsWith 会被同前缀兄弟目录（如 ../parking-simulator-xxx）绕过
   var rel = path.relative(ROOT, file);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) { res.writeHead(403); res.end(); return; }
+  // 点开头的路径段（.git/.codebuddy 等）一律拒绝：README 建议局域网开放给手机访问，不能把仓库元数据一并暴露
+  if (rel.split(path.sep).some(function (seg) { return seg.charAt(0) === '.'; })) { res.writeHead(403); res.end(); return; }
   fs.readFile(file, function (err, data) {
     if (err) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, {

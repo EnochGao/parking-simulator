@@ -108,7 +108,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     var roof = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.06, roofLen), bodyM);
     roof.position.set(0, 1.48, roofZ);
     g.add(roof);
-    return { g: g, roof: roof, cabin: cabin };
+    return { g: g, roof: roof };
   }
 
   function buildWheels(g, seg, frontWheels) {
@@ -170,7 +170,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     g.add(parts.g);
     // 外顶板：顶面 1.51（≈飞度 1.537m 含天线/饰条），前缘缩到 z=0.45（z>0.45 为风挡区域）——
     // 车内后视镜吊在车顶前缘正下方、贴着屏幕最上方，驾驶员视线从顶板前缘下方穿过不被遮挡
-    var roof = parts.roof, cabin = parts.cabin;
+    var roof = parts.roof;
 
     var frontWheels = [];
     buildWheels(g, 14, frontWheels);
@@ -192,7 +192,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
     return {
       group: g,
-      cabin: cabin,
       roof: roof,  // 车顶板（车内后视镜渲染时隐藏，避免镜中一大片自家车顶）
       frontWheels: frontWheels,
       brakeLights: [bl, br],

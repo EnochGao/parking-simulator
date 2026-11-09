@@ -125,7 +125,7 @@ function run(targetName) {
     console.log('\n' + failed + ' 项失败（加载即崩，后续跳过）');
     process.exit(1);
   }
-  /* 模块数 = tools/build_mini.js MODULES（v1.6 加 levels/scenes.js 后 28） */
+  /* 模块数 = tools/build_mini.js MODULES 27 个业务模块 + libs/three.min.js = 28（新增一章需同步此数） */
   check('入口按序加载了全部 ' + 28 + ' 个模块', Object.keys(loadedModules).length === 28,
     '实际 ' + Object.keys(loadedModules).length);
 
@@ -197,7 +197,7 @@ function run(targetName) {
 
   var items = PS.Progress.unlockMap(PS.Levels.LEVELS, {});
   hud.showLevelSelect(items, function (lv) { picked = lv; }, function () {});
-  check('选关：15 张关卡卡片 + 返回按钮全部注册命中区', ui.screen.widgets.length === items.length + 1);
+  check('选关：全部关卡卡片 + 返回按钮注册命中区', ui.screen.widgets.length === items.length + 1);
   check('选关：内容超高启用滚动', ui.screen.contentH > ui.screen.viewH, 'content=' + ui.screen.contentH + ' view=' + ui.screen.viewH);
   check('选关：卡片坐标合法（宽度>0，无负尺寸）', ui.screen.widgets.every(function (w) { return w.w > 0 && w.h > 0; }));
   PS.UiWx.tick(2);

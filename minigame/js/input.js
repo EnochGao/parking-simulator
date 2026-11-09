@@ -37,17 +37,17 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
    */
   function createDriver(keys, gpad, touch) {
     var out = { steer: 0, drive: 0, holdSteer: true, handbrake: false };
+    var tsIn = { steer: 0, drive: null, handbrake: false };   // 方向盘模拟量通道复用对象（同 out 契约：mergeDrive 同步消费，勿保留）
     return {
       sample: function () {
         deps();
         var gs = gpad ? gpad.drive() : null;
         var ts = (touch && touch.steer) ? touch.steer : 0;
         if (ts) {   // 方向盘有转角：与手柄模拟量同通道（键盘仍最高优先）
-          gs = {
-            steer: ts,
-            drive: gs ? gs.drive : null,
-            handbrake: gs ? gs.handbrake : false
-          };
+          tsIn.steer = ts;
+          tsIn.drive = gs ? gs.drive : null;
+          tsIn.handbrake = gs ? gs.handbrake : false;
+          gs = tsIn;
         }
         var m = GP.mergeDrive(
           (keys.a ? 1 : 0) - (keys.d ? 1 : 0),

@@ -31,7 +31,7 @@
       /* 调试页脚本一律带时间戳：绕开 HTTP 缓存，改完源码刷新即生效 */
       var B = '?b=' + Date.now();
       var files = ['js/platform.js', 'js/config.js', 'js/level_kit.js', 'js/levels/basic.js',
-        'js/levels/advanced.js', 'js/levels/challenge.js', 'js/demo_paths.js', 'js/levels.js',
+        'js/levels/advanced.js', 'js/levels/challenge.js', 'js/levels/scenes.js', 'js/demo_paths.js', 'js/levels.js',
         'js/progress.js', 'js/ui_wx.js', 'js/debug_frame_entry.js'];
       files.forEach(function (f) { document.write('<script src="' + f + B + '"><\/script>'); });
     } else {

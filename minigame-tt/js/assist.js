@@ -303,9 +303,10 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
   /** 简易音效引擎（WebAudio，首次用户手势解锁） */
   function createAudio() {
-    var ctx = null, master = null, engine = null, engineGain = null, enabled = true;
+    var ctx = null, master = null, engine = null, engineGain = null, enabled = true, broken = false;
     function ensure() {
       if (ctx) return true;
+      if (broken) return false;
       try {
         /* 上下文来源 platform：网页 new AudioContext / 小游戏 wx.createWebAudioContext
          * （节点 API 同构：oscillator/gain/setTargetAtTime 两端一致） */
@@ -329,13 +330,19 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         engineGain.connect(master);
         engine.start();
         return true;
-      } catch (e) { return false; }
+      } catch (e) {
+        /* 半初始化（ctx 已建、节点创建中途抛错）：整体回滚并停用音效——否则 ctx 非空让后续
+         * ensure() 短路返回 true，engine()/beep() 在空节点上逐物理步抛错；停用而非重试，
+         * 免得每步重建上下文。上下文本身没建成的失败沿用原逻辑（ctx 仍空，下次再试） */
+        if (ctx) { ctx = master = engine = engineGain = null; broken = true; }
+        return false;
+      }
     }
     function unlock() { if (ensure() && ctx.state === 'suspended') ctx.resume(); }
     return {
       unlock: unlock,
       setEnabled: function (v) { enabled = v; if (master) master.gain.value = v ? 0.5 : 0; },
-      engine: function (speed, gearR) {
+      engine: function (speed) {
         if (!ensure() || !enabled) return;
         var f = 52 + Math.abs(speed) * 30;
         engine.frequency.setTargetAtTime(f, ctx.currentTime, 0.05);

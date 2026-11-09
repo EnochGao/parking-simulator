@@ -28,7 +28,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.speed = 0;          // m/s, 沿车头方向（负=倒退）
     this.steer = 0;          // 前轮转角 rad
     this.gear = 'D';         // 'D' | 'R'
-    this.odometer = 0;       // 累计行驶里程（绝对值）
     /* 后轴参考：真车低速运动学的正确参考点——后轮不偏转、不侧滑，瞬时转向中心
      * 在后轴延长线上。x/z 仍存车几何中心（碰撞 OBB/渲染/评分锚点），由后轴位置
      * 沿航向前推 dRear（中心→后轴距离）推导，保证刚体一致。 */
@@ -145,7 +144,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       rz += this.speed * f1z * dt;
       this.x = rx + f1x * this._dRear;
       this.z = rz + f1z * this._dRear;
-      this.odometer += Math.abs(this.speed) * dt;
     }
     // 不再返回快照对象：sim.step 调用后直接丢弃（60Hz 纯浪费分配），调用方一律读实例字段
   };

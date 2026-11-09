@@ -327,7 +327,7 @@
    * interiorHideExtra: 仅渲染车内后视镜画面时额外隐藏的对象（如车顶板）
    * 返回 { render(renderer, scene), mirrors:[{grp,plane,cam,adjYaw,adjPitch,apply()}], revCam, revPlane, revRt }
    */
-  function buildMirrors(carGroup, renderer, hideInMirror, interiorHideExtra) {
+  function buildMirrors(carGroup, hideInMirror, interiorHideExtra) {
     hideInMirror = hideInMirror || [];
     var VIEW = PS.VIEW || {};
     // 视场角直读 config.VIEW（唯一源；此前的 || 58 兜底是永不生效的死默认，还与配置值 40 相矛盾）。
@@ -369,7 +369,7 @@
       }
       carGroup.add(grp);
       var m = {
-        cam: cam, rt: rt, plane: plane, mat: mat, grp: grp,
+        cam: cam, rt: rt, plane: plane, grp: grp,
         camYaw0: camYawDeg * D2R, camPitch0: (camPitchDeg || 0) * D2R,
         hideExtra: hideExtra || [],
         _extraVis: [],   // hideExtra 各项可见性的复用槽位（镜面渲染前暂存、渲染后恢复）

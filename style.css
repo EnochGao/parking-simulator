@@ -19,6 +19,11 @@ body { font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; co
 .hud-stats { display: flex; gap: 10px; }
 .hud-stat { background: rgba(16,18,24,.72); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
 .hud-stat.warn b { color: #ff7a66; }
+/* 辅助全关时文案为空：不留空底色胶囊（canvas 版同样不画） */
+.hud-stat:empty { display: none; }
+/* 🔊 音效开关是 span：.hud-root 的 pointer-events:none 会继承下来令其不可点，此处单独放开
+ * （HUD 隐藏时不放开，免得透明 chip 接住点击；全屏界面 .screen 在其上方，不受影响） */
+.hud:not(.hidden) .hud-stat.audio { pointer-events: auto; cursor: pointer; }
 .hud-bottom { position: absolute; bottom: 18px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .cluster { display: flex; align-items: center; gap: 18px; background: rgba(16,18,24,.42); border: 1px solid #33384260; border-radius: 16px; padding: 8px 18px; }
 .gear span { font-size: 34px; font-weight: 800; color: #6fd66f; }

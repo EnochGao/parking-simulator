@@ -258,11 +258,6 @@ function copyMirrorX(src, dst) {
   return dst;
 }
 
-Geo.prototype.translate = function (t) {
-  this.mapVerts(function (p) { return [p[0] + t[0], p[1] + t[1], p[2] + t[2]]; }, false);
-  return this;
-};
-
 /** 两点间矩形梁（A 柱/C 柱/后视镜支臂/行李架等） */
 function addBeam(g, p0, p1, w, h) {
   var d = V.norm(V.sub(p1, p0));
@@ -704,12 +699,6 @@ function sweepRounded(g, profile, xCenter, xHalf, segs, taper) {
   addSweepX(g, profile, st);
 }
 
-function addTriRef(g, a, b, c, ref) {
-  var n = V.cross(V.sub(b, a), V.sub(c, a));
-  if (ref && V.dot(n, ref) < 0) { var t = b; b = c; c = t; }
-  g.tri(g.vert(a), g.vert(b), g.vert(c));
-}
-
 /** 圆环（方向盘轮缘等）：basis = [e1, e2, n] 正交基 */
 function addTorus(g, center, R, r, basis, segs, tubeSegs) {
   var e1 = basis[0], e2 = basis[1], n = basis[2];
@@ -1049,7 +1038,6 @@ function buildCar(def) {
   var eyeX = def.W * 0.212;                       // 左舵驾驶位（+X 为车左侧）
   var cabW = W * 0.435;                           // 内饰半宽
   var dashZ = cabinZ0 - 0.02;                     // 仪表台前缘（风挡根部）
-  var dashTop = beltY - 0.005;
 
   /* 地板 / 顶棚 / 前围 / 后隔板 */
   var floorY = def.H * 0.205;

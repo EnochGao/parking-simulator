@@ -189,8 +189,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         disposables.push(bm.geometry);
       } else if (o.t === 'pillar') {
         var d2 = PS.Levels.DIMS.pillar;
-        var pm = new THREE.Mesh(new THREE.BoxGeometry(d2.w, 3.2, d2.l), concreteM);
-        pm.position.set(o.x, 1.6, o.z);
+        var pm = new THREE.Mesh(new THREE.BoxGeometry(d2.w, d2.h, d2.l), concreteM);
+        pm.position.set(o.x, d2.h / 2, o.z);
         pm.castShadow = true;
         group.add(pm);
         disposables.push(pm.geometry);

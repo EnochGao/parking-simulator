@@ -68,7 +68,7 @@ section('物理模型');
   check('倒车蠕行：再次轻点重新从蠕行开始', Math.abs(Math.abs(c.speed) - CFG.PHYS.creep / 3.6) < 0.02, 'v=' + c.speed.toFixed(3));
   // 软接合：起步加速度受 creepAccel 限制（不再瞬间贴上蠕行速度），且拉起段加速度渐入无阶跃
   c = new PHYS.CarPhysics({ car: CFG.CAR, phys: CFG.PHYS }, { x: 0, z: 0, heading: 0 });
-  var prevV = 0, maxAcc = 0;
+  var maxAcc = 0;
   for (i = 0; i < 15; i++) {                       // 接合段 0.25s：加速度恒为 creepAccel
     var v0 = c.speed;
     c.update(1 / 60, { drive: -1 });
@@ -534,7 +534,7 @@ section('脉冲积分');
 /* ---------------- 13. 双积分器差分（"规划即所行"契约门禁） ----------------
  * physics.js（玩家侧）与 pulse.js（演示/规划侧）纵向模型刻意不同（蠕行/接合 vs 巡行），
  * 巡行速度也不同（maxFwd vs demoSpeed），轨迹不可直接比对——但运动学核心必须满足
- * 同一解析契约，这是全部 15 关标准答案"规划即所行"的基础：
+ * 同一解析契约，这是全部 22 关标准答案"规划即所行"的基础：
  *   ① Δheading = v·tan(δ)/L·dt（v=步后速度、δ=步后转角）
  *   ② 后轴每步位移恰为 v·dt·f(h_步后)（提取用步前航向、推进/回嵌用步后航向的纯滚动）
  * 任一侧改动破坏同式即红。两积分器分别钉在各自稳态速度上（每步纵向净零）验证 */
@@ -554,7 +554,7 @@ section('双积分器差分');
     var okDh = true, okRa = true, worst = 0;
     for (var i = 0; i < seq.length * ROUNDS; i++) {
       var sf = seq[i % seq.length];
-      var h0 = state.h, v0 = state.v, d0 = state.steer;
+      var h0 = state.h, v0 = state.v;
       var ra0 = rearAxle(state.x, state.z, h0);
       stepFn(sf);
       // ① 航向增量（用步后速度/步后转角预言）

@@ -73,20 +73,23 @@
     };
     api.setAudioOn = function (on) { node('hud-audio').textContent = on ? '🔊' : '🔇'; };
     api.hideHud = function () { hud.classList.add('hidden'); };
-    /* 数值先比后格式化：toFixed/字符串转换只在值变化时发生（每帧 3 个字符串的浪费省掉） */
+    /* 数值先比后格式化：toFixed/字符串转换只在值变化时发生（每帧 3 个字符串的浪费省掉）。
+     * 格式化函数提到闭包外（update 每帧调用，不再每帧新建 3 个闭包） */
     function setNum(id, v, fmt) {
       if (lastVals[id] === v) return;
       lastVals[id] = v;
       node(id).textContent = fmt(v);
     }
+    function fmtTenths(v) { return (v / 10).toFixed(1); }
+    function fmtInt(v) { return '' + v; }
 
     api.update = function (state) {
-      setNum('hud-time', Math.round(state.time * 10), function (v) { return (v / 10).toFixed(1); });
-      setNum('hud-coll', state.collisions, function (v) { return '' + v; });
+      setNum('hud-time', Math.round(state.time * 10), fmtTenths);
+      setNum('hud-coll', state.collisions, fmtInt);
       setText('hud-gear', state.gear);
       var gcls = state.gear === 'R' ? 'r' : 'd';
       if (lastVals.gcls !== gcls) { lastVals.gcls = gcls; node('hud-gear').className = gcls; }
-      setNum('hud-speed', Math.round(Math.abs(state.speed) * 3.6), function (v) { return '' + v; });
+      setNum('hud-speed', Math.round(Math.abs(state.speed) * 3.6), fmtInt);
       var range = state.radarRange || 2.5;                       // 报警半径与 game.js RADAR.range 同源
       var lv4 = state.radar != null ? Math.ceil(Math.max(0, 1 - state.radar / range) * 4) : 0;
       if (lastVals.radar !== lv4) {
@@ -159,7 +162,7 @@
         card.innerHTML =
           '<div class="lc-head">' + lv.id.replace('lv', '') + '</div>' +
           '<div class="lc-name">' + lv.name + '</div>' +
-          '<div class="lc-stars">' + (it.stars ? stars(it.stars) : '☆☆☆') + '</div>' +
+          '<div class="lc-stars">' + stars(it.stars) + '</div>' +
           '<div class="lc-diff">' + '▪'.repeat(lv.diff) + '</div>' +
           (unlocked ? '' : '<div class="lc-lock">🔒 通关上一关解锁</div>');
         if (unlocked) card.onclick = function () { onPick(lv); };
@@ -187,7 +190,9 @@
       var tips = el('ul', 'brief-tips');
       (level.tips || []).forEach(function (t) { tips.appendChild(el('li', '', t)); });
       box.appendChild(tips);
-      box.appendChild(el('p', 'brief-meta', '标准用时 ' + level.par + ' 秒 · 碰撞 ≤4 次仍可通过，剐蹭会扣分'));
+      /* 可通过碰撞数 = 失败上限 - 1（opts.maxColl 源自 SCORE.maxCollisions，与 HUD 同源） */
+      var passColl = ((opts && opts.maxColl) || 5) - 1;
+      box.appendChild(el('p', 'brief-meta', '标准用时 ' + level.par + ' 秒 · 碰撞 ≤' + passColl + ' 次仍可通过，剐蹭会扣分'));
       var go = el('button', 'btn big', '开始 (回车 / 手柄A)');
       go.onclick = onStart;
       box.appendChild(go);

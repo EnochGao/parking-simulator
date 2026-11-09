@@ -282,9 +282,6 @@ function solve(level, opt) {
                     if (g2b === g3 && sfs[si3] !== 0 && sfs[si2] !== 0) continue;
                     for (var di3 = 0; di3 < durs.length; di3++) {
                       var nC = expand(nB, { g: g3, sf: sfs[si3], dur: durs[di3] });
-                      var dv3x = nC ? SCO.angleDevDeg(nC.h, spotJ.angle) : 999;
-                      var dxx = nC ? (spotJ.x - nC.x) : 0, dzz = nC ? (spotJ.z - nC.z) : 0;
-                      var crx = nC ? Math.abs(dxx * Math.cos(nC.h) - dzz * Math.sin(nC.h)) : 999;
                       var hit3 = tryAxis(nC, [
                         { g: g1b, sf: sfs[si1], dur: durs[di1] },
                         { g: g2b, sf: sfs[si2], dur: durs[di2] },
@@ -414,7 +411,6 @@ args.forEach(function (a) {
 var levels = ids.length ? ids.map(function (i) { return LVL.byId(i); }).filter(Boolean) : LVL.LEVELS;
 
 try { out = require(path.join(JS, 'demo_paths.js')); } catch (e) { /* 首次生成 */ }
-out._fp = CFG.fingerprint();   // 物理指纹随烘焙写入：参数改动而未重跑时回归测试红（见 config.js）
 var fail = 0;
 levels.forEach(function (lv) {
   var r = null, verified = false, gearCosts = [2.5, 5, 8, 14];
@@ -462,6 +458,12 @@ levels.forEach(function (lv) {
   }
 });
 
+/* 指纹只在"本次全部求解成功"时刷新写入：单关重解（如新关卡工作流 node tools/solver.js lv23）
+ * 不能顺带给所有未重解的旧路径盖上新指纹——那样物理参数改动后，未重解的过期路径
+ * 会因指纹新鲜而绕过回归测试的"路径新鲜度"门禁 */
+if (!ids.length && !fail) {
+  out._fp = CFG.fingerprint();   // 物理指纹随烘焙写入：参数改动而未重跑时回归测试红（见 config.js）
+}
 if (!ids.length || !fail) {
   writeOut();
   console.log('已写入 js/demo_paths.js');

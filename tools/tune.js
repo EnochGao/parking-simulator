@@ -20,7 +20,7 @@ levels.forEach(function (lv) {
   if (r.result) {
     console.log('  偏差 pos=' + r.result.posOffset.toFixed(3) + 'm ang=' + r.result.devDeg.toFixed(2) + '° 得分=' + r.result.score + ' 星=' + r.result.stars);
   }
-  // 输出每 2 秒的轨迹采样（调试用）
+  // 输出轨迹采样（调试用：全程约 40 个均匀采样点）
   if (r.path && process.env.VERBOSE) {
     var step = Math.max(1, Math.floor(r.path.length / 40));
     var line = [];

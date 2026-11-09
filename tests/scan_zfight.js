@@ -14,20 +14,17 @@ var D2R = Math.PI / 180;
 var COPLANAR_TOL = 1e-3;      // 1mm：视为共面（深度缓冲无法区分）
 var INTERPEN_TOL = 0.02;      // 2cm：嵌入超过此值算穿模
 
-function obbOf(o) {
-  if (o.t === 'wall' || o.t === 'bldg') return { hw: (o.wid || 0.4) / 2, hl: o.len / 2, h: o.h || (o.t === 'bldg' ? 10 : 2.2) };
-  if (o.t === 'pillar') return { hw: 0.25, hl: 0.25, h: 3.0 };
-  if (o.t === 'car') return { hw: 1.694 / 2, hl: 4.109 / 2, h: 1.52 };
-  return null;   // tree/bin 非盒体（圆柱/圆角），跳过
-}
-
 function scan() {
   var out = [];
   L.LEVELS.forEach(function (lv) {
-    var obs = [];
-    lv.obstacles.forEach(function (o) {
-      var d = obbOf(o);
-      if (d) obs.push({ x: o.x, z: o.z, ang: (o.a || 0) * D2R, hw: d.hw, hl: d.hl, h: d.h, t: o.t, id: o.t + '@(' + o.x + ',' + o.z + ',' + (o.a || 0) + ')' });
+    /* 障碍 OBB 与渲染/碰撞同一来源（getObstacleObbs 含边界墙、DIMS 单源尺寸）——
+     * 旧实现手工重算尺寸且漏掉边界墙，漏过楼体贴边界墙的共面 z-fight。
+     * tree/bin 非盒体（圆柱/球冠/圆角），无平面可争深度，跳过 */
+    var obs = L.getObstacleObbs(lv).filter(function (o) {
+      return o.t !== 'tree' && o.t !== 'bin';
+    }).map(function (o) {
+      return { x: o.x, z: o.z, ang: o.angle, hw: o.hw, hl: o.hl, h: o.h,
+        t: o.t, id: o.t + (o.bound ? '#bound' : '') + '@(' + o.x + ',' + o.z + ',' + (o.angle / D2R) + ')' };
     });
     for (var i = 0; i < obs.length; i++) {
       for (var j = i + 1; j < obs.length; j++) {

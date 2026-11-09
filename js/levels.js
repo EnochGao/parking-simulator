@@ -1,7 +1,8 @@
 /* 关卡聚合器：数据按章拆在 js/levels/*.js（构造器在 js/level_kit.js），此处拼装与查询。
  * 浏览器按 index.html 脚本序把章注册进 PS.CHAPTERS，Node 由本章显式 require——
  * 两侧拼出同一份 LEVELS，解锁链/选关/回归/求解器照常只面向 LEVELS 编程。
- * 新增一章 = js/levels/xx.js + index.html 一行 script + 此处 require 一行（浏览器侧零改动）。
+ * 新增一章 = js/levels/xx.js + index.html 一行 script + 此处 require 一行 + sw.js ASSETS 一行
+ * + tools/build_mini.js MODULES 一行（小游戏包；并同步 tests/mini_bundle_test.js 模块数）。
  * 坐标：米；角度为度。heading=0 朝 +z，90 朝 +x。
  * spot: {x,z,a,w,l} a=泊车朝向(度), w=垂直泊车方向宽, l=泊车方向长
  * 标准答案路径在 js/demo_paths.js（tools/solver.js 产物，getPhases 读取）

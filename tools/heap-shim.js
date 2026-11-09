@@ -1,4 +1,4 @@
-/* 最小二叉堆（solver/lv09_rescue 共用结构） */
+/* 最小二叉堆（tools/solver.js A* 专用结构） */
 'use strict';
 function Heap() { this.a = []; }
 Heap.prototype.push = function (n) {

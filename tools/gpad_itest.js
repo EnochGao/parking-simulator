@@ -88,7 +88,7 @@ poll(2);
 var d = gp.drive();
 check('摇杆模拟量转向（左为正）', d.steer > 0.05 && d.steer < 0.06, 'steer=' + d.steer.toFixed(3));
 check('RT 前进', d.drive === 1);
-check('松杆保持转角', GP.mergeDrive(0, 0, d).holdSteer === false);
+check('摇杆带偏量时 holdSteer=false（不冻结偏转角）', GP.mergeDrive(0, 0, d).holdSteer === false);
 
 pad.axes[0] = 0; rel(GP.BTN.RT);
 pad.buttons[GP.BTN.B].pressed = true; pad.buttons[GP.BTN.B].value = 1; // B 手刹

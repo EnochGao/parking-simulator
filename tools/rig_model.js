@@ -425,7 +425,7 @@ function main() {
     gl.nodes.push({
       name: job.name,
       translation: pivotParent,
-      children: [ni],
+      children: [],   // 子节点由下方 attach 挂入（此处若预填 [ni]，attach 会再 push 一次 → children 重复，网格被绘制两遍）
       extras: { kind: 'pivot', axis: job.axis || 'Z' }
     });
     var newIdx = gl.nodes.length - 1;

@@ -39,7 +39,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
   var globalPointCbs = [];        // 任意触下（解锁音频用）
   var canvasTouchHandlers = [];   // onCanvasTouch 注册的处理器（统一触摸总线分发）
   var overlayRenderFn = null;     // ui_wx 注册的 UI 合成钩子（全屏贴图叠加进主画布）
-  var overlayNeedsFrameFn = null; // ui_wx 注册的"UI 是否有新内容"判定（game.js 整帧门控用）
   var launchQuery = null;         // 启动参数缓存（getLaunchOptionsSync 只在启动有意义）
   var winInfo = null;             // 窗口信息缓存（resize 时刷新）
 
@@ -289,11 +288,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
           }
         }
       }
-    },
-    /** UI 层是否有待绘制内容（闪烁衰减/滚动/按压缩放等）。game.js 的整帧门控据此
-     *  放行：静止菜单无交互时不重渲染（GPU 零负载），一有触摸即恢复合成。 */
-    setOverlayNeedsFrame: function (fn) { if (isMiniGame) overlayNeedsFrameFn = fn; },
-    overlayNeedsFrame: function () { return !!(isMiniGame && overlayNeedsFrameFn && overlayNeedsFrameFn()); }
+    }
   };
 
   return api;

@@ -1,13 +1,14 @@
-/* 第四章·场景篇：学车博主同款"场景 × 方法"专项（lv16-20）。构造器见 js/level_kit.js。
+/* 第四章·场景篇：学车博主同款"场景 × 方法"专项（lv16-22）。构造器见 js/level_kit.js。
  * 调研依据与场景→方法映射见 docs/RESEARCH_SCENES_LEVELS.md：
- * 车头入库（引擎盖盖线）、侧方 B 柱借位切入、窄巷三把轮掉头、断头路倒数第二位、机械车位对正直倒。 */
+ * 车头入库（引擎盖盖线）、侧方 B 柱借位切入、窄巷三把轮掉头、断头路倒数第二位、机械车位对正直倒、
+ * 窄路窄位反推揉库、窄路侧方对向停车。 */
 (function (root, factory) {
   var api = factory(root);
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.PS = root.PS || {}; root.PS.CHAPTERS = root.PS.CHAPTERS || []; root.PS.CHAPTERS.push(api); }
 })(typeof self !== 'undefined' ? self : this, function (root) {
   var K = (typeof module === 'object' && module.exports) ? require('../level_kit.js') : root.PS.LevelKit;
-  var car = K.car, wall = K.wall, bldg = K.bldg, pillar = K.pillar, tree = K.tree, bin = K.bin, neighbors = K.neighbors;
+  var car = K.car, wall = K.wall, bldg = K.bldg, pillar = K.pillar, tree = K.tree, bin = K.bin;
 
   return {
     title: '第四章·场景篇', levels: [
@@ -141,7 +142,7 @@
           car(-8.0, -3.2, 90), car(-3.5, -3.2, 90), car(3.5, -3.2, 90),  // 对向停车压窄通道（车头南摆余量约 1.5m，需倒车平移揉）
           wall(0, 2.6, 90, 24, 0.3, 0.45),                          // 北侧路沿
           tree(10, 3.5),
-          bldg(0, 8.7, 90, 26, 9, 11), bldg(0, -9.5, 90, 26, 9, 11)],
+          bldg(0, 8.7, 90, 26, 9, 11), bldg(0, -9.8, 90, 26, 9, 11)],   // 南楼北立面 -5.3 退入南边界墙厚内（-5.4~-5.0），不与墙内侧面 -5.0 共面
         bounds: { minX: -15, maxX: 13, minZ: -5, maxZ: 5.5 },
       }
     ]

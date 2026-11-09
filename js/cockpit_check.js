@@ -26,7 +26,7 @@
     var emblem = wheel.getObjectByName('emblem');
     var frontWheels = g.rig.car.frontWheels;
     var ratio = CAR.steerVisualRatio;
-    var cap = CAR.steerVisualRate || 300 * D2R;
+    var cap = CAR.steerVisualRate;   // 与 carRig 同读 config 单源（旧 || 300*D2R 兜底是历史上的错误值）
     var deg = function (r) { return (r * 180 / Math.PI).toFixed(1) + '°'; };
     var FRAME = 1 / 60, settleN = Math.ceil((CAR.maxSteer * ratio) / (cap * FRAME)) + 10;
 

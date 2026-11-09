@@ -57,8 +57,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     /* 相机（作为玩家车子对象，随车移动） */
     this.camera = new THREE.PerspectiveCamera(this.cfg.VIEW.fov, Math.max(1, PLAT.width()) / Math.max(1, PLAT.height()), 0.12, 220);
     this.topCamera = new THREE.OrthographicCamera(-14, 14, 9, -9, 0.5, 120);
-    this.usingTop = false;
-    this.lookYaw = 0; this.lookPitch = 0; this.lookHeld = 0;
+    this.lookYaw = 0; this.lookHeld = 0;
 
     /* 灯光 */
     this.hemi = new THREE.HemisphereLight(0xcfe5ff, 0x8a8f7a, 1.05);
@@ -502,7 +501,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._mirrorsDirty = true;               // 新关卡强制渲染一帧镜面/倒影 RT
     this._frameDirty = true;                 // 新世界至少画一帧，简报叠加层背后才有画面
     this._lastRevOn = null; this._lastRevSteer = 0;
-    this.usingTop = false; this.assist.top = false;
+    this.assist.top = false;
     this._topYaw = 0; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
     this._tips = lv.tips || [];              // 无 tips 关不再每帧兜底新建空数组
     this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions, nose: noseTxt });
@@ -859,7 +858,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     var self = this;
     if (!this.replaying) {
       this.PS.Progress.record(this.level.id, ev);
-      this._replayTape = this.recorder.tape.length ? this.recorder.tape : null;
+      /* 冻结须拷贝：recorder.reset() 原地清空同一数组（input.js 契约），只存引用会让
+       * startReplay → loadLevel 的 reset 把待回放的带一并清空（回放车辆原地不动） */
+      this._replayTape = this.recorder.tape.length ? this.recorder.tape.slice() : null;
     }
     this.replaying = false;
     this.tapePlayer = null;
@@ -886,7 +887,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.hud.hideScreen();
     this.state = 'playing';
     this.replaying = true;
-    this.tapePlayer = PS.Input.createTapeSource(this._replayTape);
+    this.tapePlayer = this.PS.Input.createTapeSource(this._replayTape);
     this.setTouchControlsVisible(false);   // 回放中驾驶控件不响应（观看而非驾驶）
   };
 
@@ -986,8 +987,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._lastEv = r.ev;
   };
 
-  /** HUD 刷新（每渲染帧一次）。提示/辅助文案仅在其输入变化时重建，配合 hud.js
-   * 的 DOM 差量缓存，静止泊车时本函数近乎零开销 */
   /** HUD 刷新（每渲染帧一次）。提示/辅助文案仅在其输入变化时重建（hint 同 _assistText
    * 一样按 key 缓存——旧实现每帧无条件拼提示串，差量只挡住了 DOM 写没挡住拼串），
    * 配合 hud.js 的 DOM 差量缓存与复用的 state 对象，静止泊车时本函数近乎零开销 */
@@ -1049,7 +1048,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     }
     this.camera.rotation.y = Math.PI + this.lookYaw;
     // rotation.x 为正即视线向下俯（rotation.y=π 时欧拉 XYZ 下 x 分量方向相反）
-    this.camera.rotation.x = this.lookPitch + CAM_PITCH;
+    this.camera.rotation.x = CAM_PITCH;
     /* 按住看镜时隐藏触屏功能列（车内镜画面扫过画面顶部，避免遮挡/误触） */
     if (this._tcLookSync) this._tcLookSync(this.lookHeld);
     /* 太阳灯跟随 */
@@ -1158,17 +1157,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
      * 小游戏端例外：真机 GL 合成器不保证保留未重绘的画布（浏览器才有此语义），
      * 静止态跳帧在真机上会黑屏——小游戏端（wx/tt）每帧重画（重活仍按需：阴影/镜面 RT/UI 贴图上传） */
     if (this.state === 'playing' || this.PS.Platform.isMiniGame) this._frameDirty = true;
-    /* 小游戏 canvas UI 有新内容（滚动/按压/闪烁）时也要整帧重画：
-     * UI 以全屏贴图叠加在主场景上，主渲染被跳过时叠加会复叠在旧合成之上 */
-    if (this.PS.Platform.overlayNeedsFrame()) this._frameDirty = true;
     if (!this._frameDirty) return;
     this._frameDirty = false;
     var cam = this.assist.top ? this.topCamera : this.camera;
     if (this.rig) {
-      // 座舱玻璃盒常显：主相机在盒体内部，FrontSide 背面剔除后不影响舱内视线；
-      // 车外任意视角（外部机位/俯视）都能看到封闭的玻璃舱体，不再是"敞篷车"。
-      // 俯视时仍隐藏内饰（车顶衬板/A 柱穿出车顶，俯视图中显示为悬空碎块）
-      this.rig.car.cabin.visible = true;
+      // 座舱玻璃盒常显（Mesh 默认可见，全程无处隐藏，无需逐帧置位）：主相机在盒体内部，
+      // FrontSide 背面剔除后不影响舱内视线；车外任意视角（外部机位/俯视）都能看到封闭的
+      // 玻璃舱体，不再是"敞篷车"。俯视时仍隐藏内饰（车顶衬板/A 柱穿出车顶，俯视图中显示为悬空碎块）
       this.rig.cockpit.interior.visible = !this.assist.top;
     }
     if (this.assist.top) this._mirrorsDirty = true;   // 俯视期间镜面不渲染，回驾驶座强制刷新

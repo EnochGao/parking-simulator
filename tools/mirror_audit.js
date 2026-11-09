@@ -33,7 +33,7 @@ function check(name, cond, extra) {
 
 /* ---- 无头构建镜面组（buildMirrors 只创建对象，不触 WebGL） ---- */
 var carGroup = new THREE.Group();
-var mirrorH = PS.Cockpit.buildMirrors(carGroup, null, [], []);
+var mirrorH = PS.Cockpit.buildMirrors(carGroup, [], []);
 var mirrors = mirrorH.mirrors;   // [左外, 右外, 车内]
 var extL = mirrors[0], extR = mirrors[1], intM = mirrors[2];
 var revCam = mirrorH.revCam, revPlane = mirrorH.revPlane;

@@ -57,8 +57,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     /* 相机（作为玩家车子对象，随车移动） */
     this.camera = new THREE.PerspectiveCamera(this.cfg.VIEW.fov, Math.max(1, PLAT.width()) / Math.max(1, PLAT.height()), 0.12, 220);
     this.topCamera = new THREE.OrthographicCamera(-14, 14, 9, -9, 0.5, 120);
-    this.usingTop = false;
-    this.lookYaw = 0; this.lookPitch = 0; this.lookHeld = 0;
+    this.lookYaw = 0; this.lookHeld = 0;
 
     /* 灯光 */
     this.hemi = new THREE.HemisphereLight(0xcfe5ff, 0x8a8f7a, 1.05);
@@ -79,7 +78,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.carP = null;       // CarPhysics（sim 借用同一实例）
     this.run = null;        // 一局（sim.js）
     this.keys = {};
-    this.touchAnalog = { steer: 0 };   // 触屏方向盘模拟量（虚拟方向盘控件维护，0=居中=保持转角）
+    this.touchAnalog = { steer: 0 };   // 模拟量方向盘通道（触屏虚拟盘/车内视角鼠标拖盘共用，0=居中=保持转角）
+    this._wheelDrag = null;            // 车内视角鼠标抓盘拖拽态（null=未抓取）
     this.input = { steer: 0, drive: 0, handbrake: false };
     this.assist = { guide: true, top: false, revCam: true };
     this.mirrorMode = false;  // 后视镜调节模式（V 进入/退出，驾驶输入封锁）
@@ -224,26 +224,46 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
      * 极角差映射，任意方向拖拽一致），画面顺拧/顺拖即顺转。触摸事件走 platform
      * 归一化总线（网页 canvas 事件 / 小游戏全局触摸分发同构）；单指仅网页端在此
      * 处理——小游戏端无 target 信息（总线收全屏触摸，分不出是否压在虚拟键上），
-     * 由 ui_wx 按控件命中判定空白触点后调 rotateTopCamera，映射同一份 dragRad */
+     * 由 ui_wx 按控件命中判定空白触点后调 rotateTopCamera，映射同一份 dragRad。
+     * 车内视角下同一鼠标改为抓 3D 方向盘打轮（wheelGrabAt 命中盘面才接管） */
     var canvas = this.renderer.domElement;
     var drag = null, twist = null, tdrag = null;
+    var lastMouse = null;   // 最近鼠标位（松开方向盘后按位恢复抓手光标）
     function canvasCenter() {
       var r = canvas.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
     PLAT.onCanvasMouse(canvas, {
       down: function (e) {
-        if (e.button !== 0 || !self.assist.top || self.state !== 'playing') return;
-        var c = canvasCenter();
-        drag = { x: e.clientX, y: e.clientY, cx: c.x, cy: c.y };
+        if (e.button !== 0 || self.state !== 'playing') return;
+        if (self.assist.top) {
+          var c = canvasCenter();
+          drag = { x: e.clientX, y: e.clientY, cx: c.x, cy: c.y };
+          return;
+        }
+        /* 车内视角：抓方向盘打轮（未命中盘面不响应，空白处无副作用） */
+        if (self.wheelGrabAt(e.clientX, e.clientY)) self._setWheelCursor('grabbing');
       },
       move: function (e) {
-        if (!drag) return;
-        var da = self.cfg.VIEW_TOP.dragRad(drag.x, drag.y, e.clientX, e.clientY, drag.cx, drag.cy);
-        drag.x = e.clientX; drag.y = e.clientY;
-        self.rotateTopCamera(da);
+        if (drag) {
+          var da = self.cfg.VIEW_TOP.dragRad(drag.x, drag.y, e.clientX, e.clientY, drag.cx, drag.cy);
+          drag.x = e.clientX; drag.y = e.clientY;
+          self.rotateTopCamera(da);
+          return;
+        }
+        lastMouse = lastMouse || { x: 0, y: 0 };
+        lastMouse.x = e.clientX; lastMouse.y = e.clientY;
+        if (self._wheelDrag) {
+          self.wheelDragTo(e.clientX, e.clientY);
+          return;
+        }
+        self.wheelHover(e.clientX, e.clientY);   // 悬停盘面抓手光标（拖拽中由 grab/release 管理）
       },
-      up: function () { drag = null; }
+      up: function () {
+        drag = null;
+        self.wheelRelease();                              // 未拖拽时是空操作（清残留抓取光标）
+        if (lastMouse) self.wheelHover(lastMouse.x, lastMouse.y);   // 原位恢复悬停态
+      }
     });
     function twistAngle(t) {
       return Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
@@ -286,6 +306,96 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       },
       end: function () { twist = null; tdrag = null; }
     });
+  };
+
+  /* ---------- 车内视角：鼠标直接操作 3D 方向盘（网页端） ----------
+   * 抓轮毂/轮缘绕盘心拖动打轮，映射与触屏虚拟方向盘同一套（VIEW_WHEEL，±270° 满打），
+   * 输入写入同一通道 touchAnalog.steer（键盘 > 模拟量 > 手柄的合并优先级不变），
+   * 松手保持转角（holdSteer 语义，与 A/D 松开一致）。抓取瞬间以当前物理转角初始化
+   * 盘角——键盘打满后接手拖拽，从盘的实际位置继续而非跳回回正。
+   * 悬停盘面光标变抓手、拖拽变抓紧，提示可交互。触屏端已有虚拟方向盘控件，
+   * 悬停光标不启用（点抓仍可用——同一通道，与虚拟盘互不冲突）。 */
+
+  /** 方向盘是否被指针命中。射线只测盘组自身——舱玻璃透明，隔着玻璃抓盘正是预期；
+   * 先刷新车组世界矩阵（鼠标事件发生在渲染帧之间，矩阵须与最新姿态一致） */
+  Game.prototype.wheelHitTest = function (x, y) {
+    if (!this.rig || this.assist.top) return false;
+    var canvas = this.renderer.domElement;
+    var r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    this.rig.group.updateWorldMatrix(true, true);
+    this.camera.updateMatrixWorld();   // 射线与投影都消费相机世界矩阵，先于 setFromCamera 刷新
+    this._ray = this._ray || new THREE.Raycaster();
+    this._ray.setFromCamera(
+      { x: ((x - r.left) / r.width) * 2 - 1, y: -((y - r.top) / r.height) * 2 + 1 },
+      this.camera);
+    return this._ray.intersectObjects(this.rig.cockpit.wheelGroup.children, true).length > 0;
+  };
+
+  /** 方向盘盘心的屏幕坐标（px，视口坐标）：拖拽极角的参考中心 */
+  Game.prototype.wheelScreenCenter = function () {
+    this._v3 = this._v3 || new THREE.Vector3();
+    this.rig.group.updateWorldMatrix(true, true);
+    this.camera.updateMatrixWorld();
+    this.rig.cockpit.wheelGroup.getWorldPosition(this._v3);
+    this._v3.project(this.camera);
+    var r = this.renderer.domElement.getBoundingClientRect();
+    return {
+      x: r.left + (this._v3.x * 0.5 + 0.5) * r.width,
+      y: r.top + (1 - (this._v3.y * 0.5 + 0.5)) * r.height
+    };
+  };
+
+  /** 按下抓盘：命中盘面才接管（返回是否命中），盘角以当前物理转角初始化并同步进模拟量 */
+  Game.prototype.wheelGrabAt = function (x, y) {
+    this._wheelDrag = null;
+    if (this.state !== 'playing' || this.mirrorMode || !this.wheelHitTest(x, y)) return false;
+    var VW = this.cfg.VIEW_WHEEL;
+    this._wheelDrag = {
+      px: x, py: y,
+      angle: this.carP ? -(this.carP.steer / this.cfg.CAR.maxSteer) * VW.maxDeg : 0
+    };
+    this.touchAnalog.steer = -this._wheelDrag.angle / VW.maxDeg;
+    return true;
+  };
+
+  /** 拖拽打轮：盘角按前后两次触点绕盘心的极角差累积（跟手），满舵钳制后写入模拟量。
+   *  盘心每事件重投影——按住 Z/X 转头时参考中心跟着盘走，不产生漂移 */
+  Game.prototype.wheelDragTo = function (x, y) {
+    var d = this._wheelDrag;
+    if (!d) return;
+    if (this.state !== 'playing' || this.mirrorMode || this.assist.top || !this.rig) {
+      this.wheelRelease();   // 拖拽中暂停/进调镜/切俯视：立即松手，不留残留转角
+      return;
+    }
+    var VW = this.cfg.VIEW_WHEEL;
+    var c = this.wheelScreenCenter();
+    var dx0 = d.px - c.x, dy0 = d.py - c.y, dx1 = x - c.x, dy1 = y - c.y;
+    d.px = x; d.py = y;   // 参考点照常前移：贴心事件只建立参考，不产出增量
+    if (dx0 * dx0 + dy0 * dy0 < 4 || dx1 * dx1 + dy1 * dy1 < 4) return;   // 贴盘心 2px 内极角发散
+    var da = VW.deltaDeg(Math.atan2(dy0, dx0) / D2R, Math.atan2(dy1, dx1) / D2R);
+    d.angle = VW.accumulate(d.angle, da);
+    this.touchAnalog.steer = -d.angle / VW.maxDeg;
+  };
+
+  /** 松手：清抓取态即保持转角（模拟量不再变化 → holdSteer），光标由调用方恢复悬停态 */
+  Game.prototype.wheelRelease = function () {
+    this._wheelDrag = null;
+    this._setWheelCursor('');
+  };
+
+  /** 悬停盘面 → 抓手光标（触屏端无悬停语义，跳过） */
+  Game.prototype.wheelHover = function (x, y) {
+    if (this.isTouch) return;
+    var hit = this.state === 'playing' && !this.mirrorMode && this.wheelHitTest(x, y);
+    this._setWheelCursor(hit ? 'grab' : '');
+  };
+
+  /** 光标只在变化时写 style（mousemove 高频，避免逐事件样式写入） */
+  Game.prototype._setWheelCursor = function (cur) {
+    if (this._wheelCursor === cur) return;
+    this._wheelCursor = cur;
+    this.renderer.domElement.style.cursor = cur;
   };
 
   /* ---------- 关卡装载 ---------- */
@@ -337,6 +447,8 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.replaying = false;       // 复盘回放态同样不跨关泄漏
     this.tapePlayer = null;
     this.recorder.reset();        // 新一局从空录像带开始（旧带已由 _finish 冻结到 _replayTape）
+    this.touchAnalog.steer = 0;   // 模拟量方向盘不复位会把上一局的转角带进新局（开局即带转角）
+    this._wheelDrag = null;       // 抓盘态同理清空（换关时指针早已抬起，防御旧 rig 引用）
     this.setTouchControlsVisible(false);   // 简报态隐藏，开始后显示
 
     var tex = this.textures || (this.textures = PS.Textures.createTextures());
@@ -389,7 +501,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._mirrorsDirty = true;               // 新关卡强制渲染一帧镜面/倒影 RT
     this._frameDirty = true;                 // 新世界至少画一帧，简报叠加层背后才有画面
     this._lastRevOn = null; this._lastRevSteer = 0;
-    this.usingTop = false; this.assist.top = false;
+    this.assist.top = false;
     this._topYaw = 0; this._topManual = false; this._topRot = 0;  // 换关重置俯视镜头状态
     this._tips = lv.tips || [];              // 无 tips 关不再每帧兜底新建空数组
     this.hud.showHud(lv, { maxColl: this.cfg.SCORE.maxCollisions, nose: noseTxt });
@@ -495,8 +607,10 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
     /** 模拟量方向盘。抓轮缘绕中心旋转（与真车
      *  同向：轮顺时针=车右转、逆时针=车左转），松手保持转角（与 A/D 松开一致），
-     *  双击回正。转角写入 self.touchAnalog.steer，经 input.js 与键盘/手柄同通道合并 */
+     *  双击回正。转角写入 self.touchAnalog.steer，经 input.js 与键盘/手柄同通道合并
+     *  （映射参数 VIEW_WHEEL 与车内视角鼠标拖盘共用——两端手感一致） */
     function steerWheel() {
+      var VW = self.cfg.VIEW_WHEEL;
       var w = document.createElement('div');
       w.className = 'tc-wheel';
       var face = document.createElement('div');
@@ -515,7 +629,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       }
       function apply() {
         face.style.transform = 'rotate(' + angle.toFixed(1) + 'deg)';
-        self.touchAnalog.steer = -angle / 270;   // ±270° 满打——与座舱方向盘转动圈数 1:1
+        self.touchAnalog.steer = -angle / VW.maxDeg;   // ±满舵——与座舱方向盘转动圈数 1:1
         w.classList.toggle('active', Math.abs(angle) > 2);
       }
       w.addEventListener('pointerdown', function (e) {
@@ -530,11 +644,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       });
       w.addEventListener('pointermove', function (e) {
         if (grab !== e.pointerId) return;
-        var a = ptAngle(e), d = a - grabA;
-        if (d > 180) d -= 360;    // 跨 ±π 跳变保护
-        if (d < -180) d += 360;
+        var a = ptAngle(e);
+        angle = VW.accumulate(angle, VW.deltaDeg(grabA, a));
         grabA = a;
-        angle = Math.max(-270, Math.min(270, angle + d));   // ±270° 满打，与座舱方向盘圈数 1:1
         apply();
       });
       function off(e) { if (grab === e.pointerId) grab = null; }
@@ -746,7 +858,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     var self = this;
     if (!this.replaying) {
       this.PS.Progress.record(this.level.id, ev);
-      this._replayTape = this.recorder.tape.length ? this.recorder.tape : null;
+      /* 冻结须拷贝：recorder.reset() 原地清空同一数组（input.js 契约），只存引用会让
+       * startReplay → loadLevel 的 reset 把待回放的带一并清空（回放车辆原地不动） */
+      this._replayTape = this.recorder.tape.length ? this.recorder.tape.slice() : null;
     }
     this.replaying = false;
     this.tapePlayer = null;
@@ -773,7 +887,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this.hud.hideScreen();
     this.state = 'playing';
     this.replaying = true;
-    this.tapePlayer = PS.Input.createTapeSource(this._replayTape);
+    this.tapePlayer = this.PS.Input.createTapeSource(this._replayTape);
     this.setTouchControlsVisible(false);   // 回放中驾驶控件不响应（观看而非驾驶）
   };
 
@@ -873,8 +987,6 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     this._lastEv = r.ev;
   };
 
-  /** HUD 刷新（每渲染帧一次）。提示/辅助文案仅在其输入变化时重建，配合 hud.js
-   * 的 DOM 差量缓存，静止泊车时本函数近乎零开销 */
   /** HUD 刷新（每渲染帧一次）。提示/辅助文案仅在其输入变化时重建（hint 同 _assistText
    * 一样按 key 缓存——旧实现每帧无条件拼提示串，差量只挡住了 DOM 写没挡住拼串），
    * 配合 hud.js 的 DOM 差量缓存与复用的 state 对象，静止泊车时本函数近乎零开销 */
@@ -936,7 +1048,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     }
     this.camera.rotation.y = Math.PI + this.lookYaw;
     // rotation.x 为正即视线向下俯（rotation.y=π 时欧拉 XYZ 下 x 分量方向相反）
-    this.camera.rotation.x = this.lookPitch + CAM_PITCH;
+    this.camera.rotation.x = CAM_PITCH;
     /* 按住看镜时隐藏触屏功能列（车内镜画面扫过画面顶部，避免遮挡/误触） */
     if (this._tcLookSync) this._tcLookSync(this.lookHeld);
     /* 太阳灯跟随 */
@@ -1045,17 +1157,13 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
      * 小游戏端例外：真机 GL 合成器不保证保留未重绘的画布（浏览器才有此语义），
      * 静止态跳帧在真机上会黑屏——小游戏端（wx/tt）每帧重画（重活仍按需：阴影/镜面 RT/UI 贴图上传） */
     if (this.state === 'playing' || this.PS.Platform.isMiniGame) this._frameDirty = true;
-    /* 小游戏 canvas UI 有新内容（滚动/按压/闪烁）时也要整帧重画：
-     * UI 以全屏贴图叠加在主场景上，主渲染被跳过时叠加会复叠在旧合成之上 */
-    if (this.PS.Platform.overlayNeedsFrame()) this._frameDirty = true;
     if (!this._frameDirty) return;
     this._frameDirty = false;
     var cam = this.assist.top ? this.topCamera : this.camera;
     if (this.rig) {
-      // 座舱玻璃盒常显：主相机在盒体内部，FrontSide 背面剔除后不影响舱内视线；
-      // 车外任意视角（外部机位/俯视）都能看到封闭的玻璃舱体，不再是"敞篷车"。
-      // 俯视时仍隐藏内饰（车顶衬板/A 柱穿出车顶，俯视图中显示为悬空碎块）
-      this.rig.car.cabin.visible = true;
+      // 座舱玻璃盒常显（Mesh 默认可见，全程无处隐藏，无需逐帧置位）：主相机在盒体内部，
+      // FrontSide 背面剔除后不影响舱内视线；车外任意视角（外部机位/俯视）都能看到封闭的
+      // 玻璃舱体，不再是"敞篷车"。俯视时仍隐藏内饰（车顶衬板/A 柱穿出车顶，俯视图中显示为悬空碎块）
       this.rig.cockpit.interior.visible = !this.assist.top;
     }
     if (this.assist.top) this._mirrorsDirty = true;   // 俯视期间镜面不渲染，回驾驶座强制刷新

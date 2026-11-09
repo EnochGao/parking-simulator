@@ -30,7 +30,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
 
   /**
    * build(opts):
-   *   scene/renderer: 渲染目标
+   *   scene: 渲染场景（镜面/倒影 RT 由 mirrorH.render(renderer, …) 每帧按需绘制，建车时无需渲染器）
    *   cfg:  PS.CONFIG
    *   pose: {x, z, a(度)} 出车姿态
    *   camera: 主相机（可选，挂进车组作第一人称眼位；幽灵车不传）
@@ -40,7 +40,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
   function build(opts) {
     var PS = window.PS;
     var cfg = opts.cfg;
-    var scene = opts.scene, renderer = opts.renderer;
+    var scene = opts.scene;
     var pose = opts.pose;
 
     var car = PS.CarModel.buildPlayerCar();
@@ -53,7 +53,7 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
      * 左右外镜相机均在车外，镜中呈现带玻璃的完整车身；车内镜相机在盒体
      * 内部，背面剔除后画面不受影响）；
      * 车内后视镜画面额外隐藏车顶板（否则镜中一大片是自家车顶+车尾） */
-    var mirrorH = PS.Cockpit.buildMirrors(car.group, renderer, [cockpit.interior], [car.roof]);
+    var mirrorH = PS.Cockpit.buildMirrors(car.group, [cockpit.interior], [car.roof]);
     /* 倒车影像屏挂在中控台（车内居中 x=0），随头转动保持真实车内位置；
      * 作为 interior 子对象，镜面/倒车渲染隐藏内饰时自动一同隐藏 */
     cockpit.interior.add(mirrorH.revPlane);
@@ -112,14 +112,14 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
        * 换算到方向盘的速度（见 config 注释），正常驾驶时方向盘每帧即时到位——
        * 松开方向键物理转角冻结，视觉盘同步停住，无"松手还在转"的延迟感；
        * 上限仅对回放/自测中转角跳变起平滑作用 */
-      var target = -fw * (CAR.steerVisualRatio || 8);
+      var target = -fw * CAR.steerVisualRatio;
       var wheel = cockpit.wheelGroup;
       var d = target - wheel.rotation.z;
-      var maxStep = (CAR.steerVisualRate || 560 * D2R) * elapsed;
+      var maxStep = CAR.steerVisualRate * elapsed;
       if (Math.abs(d) <= maxStep) wheel.rotation.z = target;
       else wheel.rotation.z += (d > 0 ? 1 : -1) * maxStep;
 
-      /* 仪表盘实时刷新（转速/时速指针；数值不变不重绘） */
+      /* 仪表盘实时刷新（齿位/时速数字 LCD；数值不变不重绘） */
       if (cockpit.updateGauges) cockpit.updateGauges(Math.abs(carP.speed) * 3.6, carP.gear);
 
       /* 刹车灯：手刹 / 松开油门滑行刹车中 / 前进中挂倒车减速（键盘与手柄统一看 input.drive）。
