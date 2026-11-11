@@ -22,6 +22,12 @@ var path = require('path');
 
 var ROOT = path.join(__dirname, '..');
 
+/* 广告位 ID（tools/adunits.json；缺文件/留空 = 模拟模式）。构建时注入 platform.js
+ * 的 AD_UNITS 占位行——adUnitId 不硬编码进 js/ 源码，网页版源码恒为空。 */
+var ADUNITS = null;
+try { ADUNITS = JSON.parse(fs.readFileSync(path.join(__dirname, 'adunits.json'), 'utf8')); }
+catch (e) { ADUNITS = null; }
+
 /* 平台目标表：outDir 产物目录 / host 宿主全局名 / project.config.json 按 IDE 各自格式。
  * 新增平台（快手 ks 等）在此加一项 + platform.js 探测处加一行即可。 */
 var TARGETS = {
@@ -53,7 +59,7 @@ var TARGETS = {
       '- 微信开发者工具「导入项目」选本目录；正式提审前在 project.config.json 换 appid',
       '- 逻辑冒烟（Node，无需开发者工具）：`npm run test:wx`',
       '- UI 预览（桌面浏览器直接点按）：`debug_wxui.html`',
-      '- 提审前待办：软著材料、小游戏备案、（可选）激励视频 SDK 接入位在 ui_wx 结算页',
+      '- 提审前待办：软著材料、小游戏备案、流量主广告位 ID 配置（tools/adunits.json，留空=模拟模式）',
       ''
     ]
   },
@@ -83,6 +89,7 @@ var TARGETS = {
       '- 逻辑冒烟（Node，无需开发者工具）：`npm run test:tt`',
       '- 包体：全包约 1MB，抖音限制主包 4MB / 总包 20MB，余量充足无需分包',
       '- 提审前待办：软著材料（可与微信复用）、小游戏备案、必接能力（客服/敏感词/侧边栏复访）',
+      '- 广告位：抖音代码位 ID 配置在 tools/adunits.json 的 tt 段（留空=模拟模式，与微信不通用）',
       '- 真机验证项：WebGL1 上下文、tt.getAudioContext 振荡器/增益节点、双指拧镜头触摸',
       ''
     ]
@@ -236,6 +243,20 @@ function build(targetName, args) {
     var dst = path.join(OUT_DIR, rel);
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     var out = wrapModule(t, rel, fs.readFileSync(src, 'utf8'));
+    /* 广告位 ID 注入：整行替换 platform.js 的 AD_UNITS 占位（源码恒为空 → 模拟模式；
+     * 行被改动时宁可构建失败也不静默漏注——漏注只退化为模拟广告，不报错难察觉） */
+    if (rel === 'js/platform.js') {
+      var units = (ADUNITS && ADUNITS[targetName]) || {};
+      /* 形状与源码占位一致：{ wx:{…}, tt:{…} }——platform.unitId 按 AD_UNITS[宿主][类型] 读，
+       * 只注入本目标一段（另一平台留空对象，绝不串位） */
+      var injected = {};
+      injected[targetName] = units;
+      var m = /^([ \t]*)var AD_UNITS = .+$/m.exec(out);
+      if (!m) { console.error('platform.js 缺少 "var AD_UNITS = …" 占位行，构建中止'); process.exit(1); }
+      out = out.replace(m[0], m[1] + 'var AD_UNITS = ' + JSON.stringify(injected) + ';');
+      var has = !!(units.rewarded || units.interstitial);
+      console.log('  广告位 ID 注入：' + (has ? Object.keys(units).filter(function (k) { return units[k]; }).join('/') + ' 已配置' : '未配置（模拟模式）'));
+    }
     fs.writeFileSync(dst, out);
     total += out.length;
   });

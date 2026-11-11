@@ -853,7 +853,9 @@
   Game.prototype._finish = function (ev, failed) {
     var self = this;
     if (!this.replaying) {
-      this.PS.Progress.record(this.level.id, ev);
+      /* AI 示范/自测演示态（mode='autotest'）不计进度：星级须玩家亲手开出，
+       * 看广告买的是「看怎么开」，不是「替我过关」 */
+      if (this.mode !== 'autotest') this.PS.Progress.record(this.level.id, ev);
       /* 冻结须拷贝：recorder.reset() 原地清空同一数组（input.js 契约），只存引用会让
        * startReplay → loadLevel 的 reset 把待回放的带一并清空（回放车辆原地不动） */
       this._replayTape = this.recorder.tape.length ? this.recorder.tape.slice() : null;
@@ -885,6 +887,25 @@
     this.replaying = true;
     this.tapePlayer = this.PS.Input.createTapeSource(this._replayTape);
     this.setTouchControlsVisible(false);   // 回放中驾驶控件不响应（观看而非驾驶）
+  };
+
+  /** AI 示范（结算页激励视频点位，docs/MONETIZATION.md §4.1 ⭐2）：标准答案自动驾驶演示。
+   *  ?autotest 同源机制收编进 Game（main.js 网页入口复用本方法）；mode='autotest' 态
+   *  _finish 跳过进度记录。返回 false = 该关无标准答案路径（调用方保持原界面即可）。 */
+  Game.prototype.startDemo = function (id) {
+    var PS = this.PS;
+    var lv = id ? PS.Levels.byId(id) : this.level;
+    if (!lv) return false;
+    var segs = PS.Levels.getPhases(lv);
+    if (!segs || !segs.length) return false;
+    this.loadLevel(lv.id, 'autotest');
+    this.hud.hideScreen();
+    this.state = 'playing';
+    this.autopilotActive = true;
+    this.replay = PS.Autopilot.createReplay(segs, this.DT, {
+      x: lv.player.x, z: lv.player.z, h: lv.player.a * Math.PI / 180
+    });
+    return true;
   };
 
   /** 完成一局（ev 为 sim 终局全量评分） */

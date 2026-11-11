@@ -560,6 +560,18 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     var cbs = [onRetry];
     var bigs = [false];
     if (onReplay) { names.push('复盘回放'); cbs.push(onReplay); bigs.push(false); }
+    /* 激励视频点位（docs/MONETIZATION.md §4.1 ⭐2）：AI 示范——看广告播本关标准答案演示。
+     * 必须用户主动点击触发（合规红线）；模拟模式（未配广告位/开发者工具）同样走通 */
+    var ADS = cur.PLAT.ads;
+    if (ADS) {
+      names.push('AI 示范');
+      cbs.push(function () {
+        ADS.showRewarded({
+          onReward: function () { if (cur.game.startDemo) cur.game.startDemo(); }
+        });
+      });
+      bigs.push(false);
+    }
     if (pass && hasNext) { names.push('下一关'); cbs.push(onNext); bigs.push(true); }
     names.push('返回菜单'); cbs.push(onMenu); bigs.push(false);
     var bw = Math.min(150, Math.floor((m.w - 40 - (names.length - 1) * 10) / names.length));

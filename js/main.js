@@ -9,7 +9,6 @@
   window.addEventListener('DOMContentLoaded', function () {
     var Game = window.PS.Game;
     var game = new Game(document.getElementById('app'));
-    var DT = game.DT;   // 与游戏壳层同一固定步长（config.PHYS.fixedDt 单源）
     window.__game = game;
 
     var q = {};
@@ -40,18 +39,8 @@
       return;
     }
     if (q.autotest) {
-      game.loadLevel(q.autotest, 'autotest');
-      game.hud.hideScreen();
-      game.state = 'playing';
-      var segs = window.PS.Levels.getPhases(game.level);
-      if (segs && segs.length) {
-        game.autopilotActive = true;
-        game.replay = window.PS.Autopilot.createReplay(segs, DT, {
-          x: game.level.player.x, z: game.level.player.z, h: game.level.player.a * Math.PI / 180
-        });
-      } else {
-        document.title = 'AUTOTEST SKIP（该关无标准答案路径）';
-      }
+      /* 标准答案演示收编进 Game.startDemo（结算页「AI 示范」激励视频点位同源复用） */
+      if (!game.startDemo(q.autotest)) document.title = 'AUTOTEST SKIP（该关无标准答案路径）';
       return;
     }
     if (q.level) {

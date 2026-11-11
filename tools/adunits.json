@@ -1,0 +1,17 @@
+{
+  "_readme": [
+    "广告位 ID 配置（docs/MONETIZATION.md §4.2：adUnitId 走构建注入，不硬编码进 js/ 源码）。",
+    "在两家流量主后台各自创建广告位后填入对应字段；留空 = 模拟模式（不请求真广告，本地/开发者工具可全功能预览）。",
+    "微信：mp.weixin.qq.com → 流量主 → 广告位管理（激励视频 / 插屏）",
+    "抖音：developer.open-douyin.com → 商业化 → 广告管理（代码位）",
+    "注意：微信与抖音的 adUnitId 互不通用，必须分别创建；本文件被 tools/build_mini.js 读取并注入 minigame*/js/platform.js。"
+  ],
+  "wx": {
+    "rewarded": "",
+    "interstitial": ""
+  },
+  "tt": {
+    "rewarded": "",
+    "interstitial": ""
+  }
+}

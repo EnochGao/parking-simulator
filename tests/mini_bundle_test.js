@@ -160,6 +160,7 @@ function run(targetName) {
   }
   check('canvas UI 实现已加载', !!PS.UiWx);
   check('调度器已加载', !!PS.Ui);
+  check('广告抽象层已加载（PS.Platform.ads）', !!PS.Platform.ads);
 
   console.log('\n== 宿主 API 路由（platform.js → wx/tt 差异点） ==');
   PS.Platform.createAudioContext();
@@ -381,7 +382,7 @@ function run(targetName) {
   hud.showResult({ par: 40 }, { stars: 3, score: 95, posOffset: 0.008, devDeg: 1.2, collisions: 0, time: 33.3 },
     function () { actions.retry++; }, function () { actions.next++; }, function () { actions.menu++; }, true,
     function () { actions.replay++; });
-  check('结算：含复盘回放共 4 按钮（再来一次/回放/下一关/返回）', ui.screen.widgets.length === 4);
+  check('结算：含复盘回放与 AI 示范共 5 按钮（再来一次/回放/示范/下一关/返回）', ui.screen.widgets.length === 5);
   var replayBtn = null;
   ui.screen.widgets.forEach(function (w) { if (w.label === '复盘回放') replayBtn = w; });
   if (replayBtn) {
@@ -390,6 +391,22 @@ function run(targetName) {
     PS.UiWx.__dispatch('end', { touches: [], changedTouches: [rt] });
   }
   check('结算：回放按钮可命中触发', actions.replay === 1);
+  /* AI 示范激励视频点位（docs/MONETIZATION.md §4.1 ⭐2）：未配广告位 → 模拟模式同步发奖
+   * （mockDelay=0），fakeGame 无 startDemo 时 onReward 安全跳过；频控 rv 计数 +1 */
+  var aiBtn = null;
+  ui.screen.widgets.forEach(function (w) { if (w.label === 'AI 示范') aiBtn = w; });
+  check('结算：AI 示范按钮就位（用户主动点击触发，合规红线）', !!aiBtn);
+  PS.Platform.ads.mockDelay = 0;   // 模拟广告同步发奖（冒烟断言用；真机默认 400ms 近似时延）
+  if (aiBtn) {
+    var at = { identifier: 13, clientX: aiBtn.x + aiBtn.w / 2, clientY: aiBtn.y + aiBtn.h / 2 };
+    PS.UiWx.__dispatch('start', { touches: [at], changedTouches: [at] });
+    PS.UiWx.__dispatch('end', { touches: [], changedTouches: [at] });
+  }
+  check('结算：点 AI 示范 → 模拟广告发奖（频控 rv+1，宿主无 startDemo 安全跳过）',
+    PS.Platform.ads.stats().rv === 1, 'rv=' + PS.Platform.ads.stats().rv);
+  check('广告层：模拟模式判定正确（未配 adUnitId 不请求真广告）', PS.Platform.ads.isMock() === true);
+  PS.Platform.ads.showInterstitial();
+  check('广告层：模拟模式插屏静默无操作（inter 不计数）', PS.Platform.ads.stats().inter === 0);
   PS.UiWx.tick(4);
   hud.showBriefing({ name: '贴墙库', desc: '极窄贴墙车位', tips: ['先直行'], par: 40 }, function () {}, function () {});
   PS.UiWx.tick(5);

@@ -42,6 +42,10 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
   var launchQuery = null;         // 启动参数缓存（getLaunchOptionsSync 只在启动有意义）
   var winInfo = null;             // 窗口信息缓存（resize 时刷新）
 
+  /* 广告位 ID：源码恒为空（网页/冒烟走模拟模式，不请求真广告）；
+   * tools/build_mini.js 构建时用 tools/adunits.json 中对应平台的值整行替换。 */
+  var AD_UNITS = {"tt":{"rewarded":"","interstitial":""}};
+
   function refreshWinInfo() {
     if (!isMiniGame) return;
     /* tt 无 getWindowInfo；wx 有（省字段）。两家 getSystemInfoSync 均返回同形窗口信息 */
@@ -98,6 +102,128 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     }
     return c;
   }
+
+  /* ---------- 广告抽象（微信/抖音流量主；设计见 docs/MONETIZATION.md §4.2） ----------
+   * wx.createRewardedVideoAd / tt.createRewardedVideoAd 同名同义：广告对象单例复用、
+   * onLoad 后预加载下一支；onClose 按 res.isEnded 判定完整观看才发奖（个别宿主无该
+   * 字段时宁可发奖——漏发投诉成本高于误发）；onError 拉新并静默降级，绝不自动重弹。
+   * 频控（激励视频每日发奖上限、插屏 ≥5 分钟间隔）持久化在宿主同步 KV，防重启绕过。
+   * 模拟模式（网页端 / adUnitId 未配置 / 宿主无广告 API）：异步直接发奖——本地与
+   * 冒烟测试可玩；插屏在模拟模式下静默无操作（开发环境不打扰）。 */
+  var adsImpl = (function () {
+    var RV_DAILY_CAP = 30;               // 单日激励视频发奖上限（防刷；行业 IPU 目标 5-8，30 已宽裕）
+    var INTER_GAP_MS = 5 * 60 * 1000;    // 插屏最小间隔（§4.2：插屏 5-10 分钟一次）
+    var FREQ_KEY = 'ps_ad_freq_v1';
+    var rewardedAd = null;               // 激励视频单例（onClose/onError 只注册一次，防回调堆叠）
+    var rvPending = null;                // 展示中的那次回调（onClose 一次性取走）
+    var interAd = null;
+    var showing = false;                 // 重入保护：展示中再触发直接忽略
+    var freq = null;                     // { d:'YYYY-MM-DD', rv, inter, interLast }
+
+    function unitId(kind) {
+      var u = AD_UNITS[hostName] || {};
+      return u[kind] ? String(u[kind]) : '';
+    }
+    function loadFreq() {
+      if (freq) return freq;
+      var raw = null, st = null;
+      try { st = api.storage(); if (st) raw = st.getItem(FREQ_KEY); } catch (e) {}
+      var today = new Date().toISOString().slice(0, 10);
+      try { freq = raw ? JSON.parse(raw) : null; } catch (e) { freq = null; }
+      if (!freq || freq.d !== today) freq = { d: today, rv: 0, inter: 0, interLast: 0 };   // 跨日重置
+      if (typeof freq.rv !== 'number') freq.rv = 0;
+      if (typeof freq.inter !== 'number') freq.inter = 0;
+      if (typeof freq.interLast !== 'number') freq.interLast = 0;
+      return freq;
+    }
+    function saveFreq() {
+      try { var st = api.storage(); if (st) st.setItem(FREQ_KEY, JSON.stringify(freq)); } catch (e) {}
+    }
+    function isMock() {
+      return !isMiniGame || !host.createRewardedVideoAd || !unitId('rewarded');
+    }
+
+    function showRewarded(opts) {
+      opts = opts || {};
+      if (showing) return;                                          // 展示中重入：忽略
+      var fq = loadFreq();
+      if (fq.rv >= RV_DAILY_CAP) { if (opts.onFail) opts.onFail('dailyCap'); return; }
+      if (isMock()) {
+        showing = true;
+        var fire = function () {
+          showing = false;
+          fq.rv++; saveFreq();
+          if (opts.onReward) opts.onReward();
+          if (opts.onDone) opts.onDone(true);
+        };
+        if (adsApi.mockDelay <= 0) fire();                          // 测试同步化（冒烟断言用）
+        else setTimeout(fire, adsApi.mockDelay);
+        return;
+      }
+      if (!rewardedAd) {
+        try {
+          rewardedAd = host.createRewardedVideoAd({ adUnitId: unitId('rewarded') });
+          rewardedAd.onError(function () { try { rewardedAd.load(); } catch (e) {} });   // 拉新，UI 侧下次再试
+          rewardedAd.onClose(function (res) {
+            var cb = rvPending; rvPending = null; showing = false;
+            try { rewardedAd.load(); } catch (e) {}                 // 预加载下一支
+            if (!cb) return;
+            var ended = res && typeof res.isEnded === 'boolean' ? res.isEnded : true;
+            if (ended) { loadFreq().rv++; saveFreq(); if (cb.onReward) cb.onReward(); if (cb.onDone) cb.onDone(true); }
+            else { if (cb.onFail) cb.onFail('skipped'); if (cb.onDone) cb.onDone(false); }
+          });
+        } catch (e) { if (opts.onFail) opts.onFail('create'); return; }
+      }
+      rvPending = { onReward: opts.onReward, onFail: opts.onFail, onDone: opts.onDone };
+      showing = true;
+      var fail = function () {
+        rvPending = null; showing = false;
+        if (opts.onFail) opts.onFail('show');
+        if (opts.onDone) opts.onDone(false);
+      };
+      try {
+        rewardedAd.show().catch(function () {
+          /* 未加载成：load 拉满后再试一次，仍失败静默降级（下次再展示） */
+          try {
+            rewardedAd.load().then(function () { return rewardedAd.show(); }).catch(fail);
+          } catch (e2) { fail(); }
+        });
+      } catch (e) { fail(); }
+    }
+
+    function showInterstitial() {
+      if (showing) return;
+      if (!isMiniGame || !host.createInterstitialAd || !unitId('interstitial')) return;   // 模拟模式静默
+      var fq = loadFreq(), now = Date.now();
+      if (fq.interLast && now - fq.interLast < INTER_GAP_MS) return;
+      if (!interAd) {
+        try {
+          interAd = host.createInterstitialAd({ adUnitId: unitId('interstitial') });
+          interAd.onError(function () {});
+        } catch (e) { interAd = null; return; }
+      }
+      /* 无论 show 成败都记间隔（失败重试交给下一次调用，不连续打扰） */
+      fq.interLast = now; fq.inter++; saveFreq();
+      try { interAd.show().catch(function () {}); } catch (e) {}
+    }
+
+    var adsApi = {
+      /** 激励视频：opts {onReward, onFail(reason), onDone(ok)}；必须由用户主动点击触发 */
+      showRewarded: showRewarded,
+      /** 插屏（仅关卡间隙调用；间隔与计数内置，失败静默） */
+      showInterstitial: showInterstitial,
+      /** 激励视频是否模拟模式（未配广告位/宿主不支持——UI 可据此标注或本地全功能预览） */
+      isMock: isMock,
+      /** 频控状态（调试/测试）：{rv, inter, interLast, rvCap} */
+      stats: function () {
+        var fq = loadFreq();
+        return { rv: fq.rv, inter: fq.inter, interLast: fq.interLast, rvCap: RV_DAILY_CAP };
+      },
+      /** 模拟模式回调时延 ms（真机观感近似；测试置 0 同步化） */
+      mockDelay: 400
+    };
+    return adsApi;
+  })();
 
   var api = {
     isWx: isWx,
@@ -234,6 +360,9 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
         setItem: function (k, v) { try { host.setStorageSync(k, String(v)); } catch (e) {} }
       };
     },
+
+    /** 广告（流量主激励视频/插屏；模拟模式与接入说明见上方 adsImpl 注释、docs/MONETIZATION.md §4.2） */
+    ads: adsImpl,
 
     /** WebAudio 上下文实例（引擎声/雷达蜂鸣均标准节点，各端同构）；不可用时返回 null。
      * 微信 wx.createWebAudioContext 按需新建；抖音 tt.getAudioContext 返回全局单例

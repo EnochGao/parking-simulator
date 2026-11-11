@@ -53,14 +53,9 @@ require('./js/game.js');
 /* ---- 启动引导（启动/运行异常屏显上报：真机黑屏直接变成可见的错误弹窗） ---- */
 try {
   var PS = __g.PS;
-  PS.Platform.init();  /* 正式包：完整启动 */
-  wx.onError && wx.onError(function (msg) {
-    __g.__PS_ERR = __psFmt(msg);
-    if (!__g.__PS_ERR_SHOWN) { __g.__PS_ERR_SHOWN = 1; __psAlert('运行错误', __g.__PS_ERR); }
-  });
-  var game = new PS.Game(null);
-  __g.__game = game;
-  game.toMenu();
+  PS.Platform.init();
+/* --smoke 变体：仅初始化平台层（mock 环境无 WebGL，Game 构造由测试自行处理） */
+PS.Platform.init();
 } catch (e) {
   __g.__PS_BOOT_ERR = String((e && e.stack) || e);
   __psAlert('启动失败', __g.__PS_BOOT_ERR);
