@@ -65,20 +65,8 @@
           "Mirror_R"
         ]
       },
-      "triangles": 9102,
       "bytes": 335904,
-      "bbox": {
-        "min": [
-          -0.999,
-          0,
-          -2.075
-        ],
-        "max": [
-          0.999,
-          1.568,
-          2.07
-        ]
-      }
+      "bbox": null
     },
     {
       "file": "car_sedan.glb",
@@ -130,20 +118,8 @@
           "Mirror_R"
         ]
       },
-      "triangles": 9252,
       "bytes": 338072,
-      "bbox": {
-        "min": [
-          -1.042,
-          0,
-          -2.33
-        ],
-        "max": [
-          1.042,
-          1.492,
-          2.326
-        ]
-      }
+      "bbox": null
     },
     {
       "file": "car_suv.glb",
@@ -195,20 +171,114 @@
           "Mirror_R"
         ]
       },
-      "triangles": 9238,
       "bytes": 340868,
-      "bbox": {
-        "min": [
-          -1.077,
-          0,
-          -2.245
+      "bbox": null
+    },
+    {
+      "file": "car_van.glb",
+      "gltf": "car_van.gltf",
+      "bin": "car_van.bin",
+      "label": "微面·平头面包车（老小区场景停放车）",
+      "style": "van",
+      "dimensions": {
+        "length": 4.05,
+        "width": 1.65,
+        "height": 1.88
+      },
+      "wheelbase": 2.7,
+      "tireRadius": 0.3,
+      "driverEye": {
+        "x": 0.35,
+        "y": 1.457,
+        "z": -0.02
+      },
+      "materials": [
+        "Paint",
+        "Glass",
+        "Trim",
+        "Chrome",
+        "HeadLamp",
+        "TailLamp",
+        "Indicator",
+        "Tire",
+        "Rim",
+        "BrakeDisc",
+        "MirrorGlass",
+        "Plate",
+        "Cabin",
+        "Fabric",
+        "Carpet",
+        "Screen",
+        "Leather"
+      ],
+      "nodes": {
+        "root": "car_van",
+        "wheels": [
+          "WheelSteer_FL",
+          "WheelSteer_FR",
+          "Wheel_RL",
+          "Wheel_RR"
         ],
-        "max": [
-          1.077,
-          1.7,
-          2.241
+        "mirrors": [
+          "Mirror_L",
+          "Mirror_R"
         ]
-      }
+      },
+      "bytes": 331056,
+      "bbox": null
+    },
+    {
+      "file": "car_mini.glb",
+      "gltf": "car_mini.gltf",
+      "bin": "car_mini.bin",
+      "label": "小型两厢（老小区场景停放车）",
+      "style": "mini",
+      "dimensions": {
+        "length": 3.95,
+        "width": 1.62,
+        "height": 1.5
+      },
+      "wheelbase": 2.4,
+      "tireRadius": 0.285,
+      "driverEye": {
+        "x": 0.343,
+        "y": 1.163,
+        "z": -0.02
+      },
+      "materials": [
+        "Paint",
+        "Glass",
+        "Trim",
+        "Chrome",
+        "HeadLamp",
+        "TailLamp",
+        "Indicator",
+        "Tire",
+        "Rim",
+        "BrakeDisc",
+        "MirrorGlass",
+        "Plate",
+        "Cabin",
+        "Fabric",
+        "Carpet",
+        "Screen",
+        "Leather"
+      ],
+      "nodes": {
+        "root": "car_mini",
+        "wheels": [
+          "WheelSteer_FL",
+          "WheelSteer_FR",
+          "Wheel_RL",
+          "Wheel_RR"
+        ],
+        "mirrors": [
+          "Mirror_L",
+          "Mirror_R"
+        ]
+      },
+      "bytes": 329604,
+      "bbox": null
     },
     {
       "file": "wheel_185_60_r15.glb",
@@ -217,52 +287,7 @@
       "label": "轮组 185/60 R15",
       "style": "wheel",
       "tireRadius": 0.3015,
-      "bytes": 21220,
-      "triangles": 680
-    },
-    {
-      "file": "car_ferrari.glb",
-      "gltf": null,
-      "bin": null,
-      "label": "car_ferrari（导入模型）",
-      "style": "imported",
-      "imported": true,
-      "triangles": 358788,
-      "bytes": 13010188,
-      "bbox": {
-        "min": [
-          -1.023,
-          0,
-          -2.055
-        ],
-        "max": [
-          1.023,
-          1.12,
-          2.054
-        ]
-      }
-    },
-    {
-      "file": "car_bmw1m_rig.glb",
-      "gltf": null,
-      "bin": null,
-      "label": "car_bmw1m_rig（导入模型）",
-      "style": "imported",
-      "imported": true,
-      "triangles": 104376,
-      "bytes": 6976588,
-      "bbox": {
-        "min": [
-          -0.983,
-          0,
-          -2.18
-        ],
-        "max": [
-          0.983,
-          1.419,
-          2.18
-        ]
-      }
+      "bytes": 21220
     }
   ]
 }

@@ -131,26 +131,166 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     });
   }
 
+  /* ---- 停放车样式库 ----
+   * 老小区停车场景的车型多样性：五款车身剪影按 seed 混布。设计约束：
+   *   1) 俯视 footprint 全部收在碰撞盒 DIMS.car（4.109 × 1.694）以内——碰撞 OBB
+   *      与视觉包围的差异 ≤3cm（幽灵碰撞不可感），关卡数据/标准答案零改动；
+   *   2) 车高是纯视觉量（SAT 碰撞只算俯视 footprint），微面/SUV 允许高过
+   *      DIMS.car.h=1.52，镜中/座舱视野里自然形成视线遮挡，与真车一致；
+   *   3) hatch 复用玩家车 buildBody（GR9 精调件）——既有关卡里两厢停放车
+   *      的外观逐顶点不变，只新增其余四款。 */
+  var TIRE_W_P = 0.185;
+  var PARK_STYLES = {
+    hatch: { L: 4.109, wheels: { axleF: AXLE_F, axleR: AXLE_R, halfF: HALF_F, halfR: HALF_R, tireR: TIRE_R } },
+    sedan: { L: 4.05, wheels: { axleF: 1.225, axleR: -1.275, halfF: 0.71, halfR: 0.71, tireR: 0.30 } },
+    suv:   { L: 4.05, wheels: { axleF: 1.175, axleR: -1.385, halfF: 0.725, halfR: 0.72, tireR: 0.335 } },
+    van:   { L: 4.05, wheels: { axleF: 1.475, axleR: -1.225, halfF: 0.69, halfR: 0.69, tireR: 0.30 } },
+    mini:  { L: 3.95, wheels: { axleF: 1.225, axleR: -1.175, halfF: 0.68, halfR: 0.68, tireR: 0.285 } }
+  };
+  var STYLE_KEYS = ['hatch', 'sedan', 'suv', 'van', 'mini'];
+
+  /** 停放车变体派生：seed → {style, ci}。world.js 模板缓存与本函数同式取键，
+   *  保证"同 seed 同款同色"（单源，取色式与旧版 seed%COLORS 兼容延续）。 */
+  function parkedVariant(seed) {
+    var s = seed || 0;
+    return {
+      style: STYLE_KEYS[s % STYLE_KEYS.length],
+      ci: Math.floor(s / STYLE_KEYS.length) % COLORS.length
+    };
+  }
+
+  function parkLamp(g, w, h, x, y, z, color) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), new THREE.MeshLambertMaterial({ color: color }));
+    m.position.set(x, y, z); g.add(m);
+  }
+
+  /* 三厢：引擎盖 + 独立尾厢，玻璃舱居中（A/C 柱由玻璃盒端面自然形成，与两厢同手法） */
+  function buildSedan(g, bodyM, glassM, d) {
+    var halfL = d.L / 2;
+    [[0.50, 1.40, 1.25], [0.55, 0, 1.55], [0.52, -1.40, 1.25]].forEach(function (b) {
+      var seg = new THREE.Mesh(new THREE.BoxGeometry(d.W, b[0], b[2]), bodyM);
+      seg.position.set(0, b[0] / 2 + 0.03, b[1]); seg.castShadow = true; g.add(seg);
+    });
+    var hood = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.04, 0.07, 0.75), bodyM);
+    hood.position.set(0, 0.79, 1.62); hood.rotation.x = 2.5 * Math.PI / 180; hood.castShadow = true;
+    g.add(hood);
+    var deck = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.05, 0.06, 0.95), bodyM);   // 尾厢盖
+    deck.position.set(0, 0.845, -1.48); g.add(deck);
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.13, 0.50, 1.80), glassM);
+    cabin.position.set(0, 1.075, 0); cabin.castShadow = true; g.add(cabin);
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.06, 1.50), bodyM);
+    roof.position.set(0, 1.36, 0); g.add(roof);
+    parkLamp(g, 0.32, 0.11, -0.52, 0.70, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.32, 0.11, 0.52, 0.70, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.30, 0.14, -0.54, 0.74, -halfL - 0.01, 0xb33a2f);
+    parkLamp(g, 0.30, 0.14, 0.54, 0.74, -halfL - 0.01, 0xb33a2f);
+  }
+
+  /* SUV：单厢感更高的后段 + 短引擎盖 + 行李架（视觉高 1.70，超碰撞 h 属视线遮挡设计） */
+  function buildSuv(g, bodyM, glassM, d) {
+    var halfL = d.L / 2;
+    var front = new THREE.Mesh(new THREE.BoxGeometry(d.W, 0.72, 1.45), bodyM);
+    front.position.set(0, 0.62, 1.30); front.castShadow = true; g.add(front);
+    var rear = new THREE.Mesh(new THREE.BoxGeometry(d.W, 0.78, 2.60), bodyM);
+    rear.position.set(0, 0.65, -0.725); rear.castShadow = true; g.add(rear);
+    var hood = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.04, 0.07, 0.60), bodyM);
+    hood.position.set(0, 1.005, 1.70); hood.rotation.x = 2 * Math.PI / 180; hood.castShadow = true;
+    g.add(hood);
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.13, 0.58, 2.30), glassM);
+    cabin.position.set(0, 1.32, -0.20); cabin.castShadow = true; g.add(cabin);
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.06, 2.35), bodyM);
+    roof.position.set(0, 1.645, -0.25); g.add(roof);
+    [[0.62], [-0.62]].forEach(function (sx) {          // 行李架
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 1.90), mat(0x3a3f45));
+      rail.position.set(sx[0], 1.705, -0.25); g.add(rail);
+    });
+    parkLamp(g, 0.34, 0.12, -0.53, 0.82, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.34, 0.12, 0.53, 0.82, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.30, 0.15, -0.55, 0.90, -halfL - 0.01, 0xb33a2f);
+    parkLamp(g, 0.30, 0.15, 0.55, 0.90, -halfL - 0.01, 0xb33a2f);
+  }
+
+  /* 微面（老小区常见平头面包车）：短前悬、近直立风挡、平顶货舱一直延到车尾 */
+  function buildVan(g, bodyM, glassM, d) {
+    var halfL = d.L / 2;
+    var nose = new THREE.Mesh(new THREE.BoxGeometry(d.W, 0.62, 0.40), bodyM);
+    nose.position.set(0, 0.56, 1.825); nose.castShadow = true; g.add(nose);
+    var hoodSlab = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.04, 0.10, 0.42), bodyM);   // 平头矮引擎盖
+    hoodSlab.position.set(0, 0.90, 1.70); g.add(hoodSlab);
+    var windshield = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.12, 0.60, 0.30), glassM);
+    windshield.position.set(0, 1.32, 1.48); windshield.rotation.x = 8 * Math.PI / 180; windshield.castShadow = true;
+    g.add(windshield);
+    var boxBody = new THREE.Mesh(new THREE.BoxGeometry(d.W, 1.30, 2.90), bodyM);
+    boxBody.position.set(0, 0.75, -0.30); boxBody.castShadow = true; g.add(boxBody);
+    var sideGlass = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.10, 0.50, 2.20), glassM);  // 侧窗带
+    sideGlass.position.set(0, 1.40, -0.05); g.add(sideGlass);
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.06, 2.55), bodyM);
+    roof.position.set(0, 1.82, -0.28); g.add(roof);
+    parkLamp(g, 0.30, 0.12, -0.52, 0.66, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.30, 0.12, 0.52, 0.66, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.12, 0.34, -0.62, 0.95, -halfL - 0.01, 0xb33a2f);   // 竖条尾灯
+    parkLamp(g, 0.12, 0.34, 0.62, 0.95, -halfL - 0.01, 0xb33a2f);
+  }
+
+  /* 小型两厢：比飞度更短更窄的代步车，比例更圆润（仍是盒体语言） */
+  function buildMini(g, bodyM, glassM, d) {
+    var halfL = d.L / 2;
+    var front = new THREE.Mesh(new THREE.BoxGeometry(d.W, 0.50, 1.00), bodyM);
+    front.position.set(0, 0.50, 1.475); front.castShadow = true; g.add(front);
+    var rear = new THREE.Mesh(new THREE.BoxGeometry(d.W, 0.55, 1.60), bodyM);
+    rear.position.set(0, 0.53, -1.175); rear.castShadow = true; g.add(rear);
+    var hood = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.04, 0.07, 0.70), bodyM);
+    hood.position.set(0, 0.775, 1.58); hood.rotation.x = 3 * Math.PI / 180; hood.castShadow = true;
+    g.add(hood);
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(d.W - 0.13, 0.52, 2.30), glassM);
+    cabin.position.set(0, 1.10, -0.05); cabin.castShadow = true; g.add(cabin);
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.06, 1.60), bodyM);
+    roof.position.set(0, 1.395, -0.10); g.add(roof);
+    parkLamp(g, 0.30, 0.11, -0.50, 0.64, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.30, 0.11, 0.50, 0.64, halfL + 0.01, 0xfff2c8);
+    parkLamp(g, 0.28, 0.14, -0.52, 0.68, -halfL - 0.01, 0xb33a2f);
+    parkLamp(g, 0.28, 0.14, 0.52, 0.68, -halfL - 0.01, 0xb33a2f);
+  }
+
+  var STYLE_BUILDERS = { hatch: null, sedan: buildSedan, suv: buildSuv, van: buildVan, mini: buildMini };
+
+  function buildParkWheels(g, d, seg) {
+    var w = d.wheels;
+    var wheelG = new THREE.CylinderGeometry(w.tireR, w.tireR, TIRE_W_P, seg);
+    var wheelM = mat(0x22252a);
+    [[-w.halfF, w.axleF], [w.halfF, w.axleF], [-w.halfR, w.axleR], [w.halfR, w.axleR]].forEach(function (p) {
+      var wheel = new THREE.Mesh(wheelG, wheelM);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(p[0], w.tireR, p[1]);
+      g.add(wheel);
+    });
+  }
+
   /** 构建静止停放车辆（供场景摆放）。
-   *  部件拼装与玩家车同一套函数（几何数值单源），随后整体合并为单 Mesh——
-   *  静止刚体无需逐件绘制：一辆车 1 次 draw call（主视图 + 镜面/倒影多遍渲染
-   *  同步受益），部件升级只改 buildBody/buildWheels 一处，合并层自动跟随。 */
+   *  部件拼装随后整体合并为单 Mesh——静止刚体无需逐件绘制：一辆车 1 次 draw call
+   *  （主视图 + 镜面/倒影多遍渲染同步受益），合并层自动跟随。
+   *  车型/颜色由 seed 单源派生（parkedVariant），world.js 模板缓存按同式取键。 */
   function buildParkedCar(color, seed) {
     var g = new THREE.Group();
-    color = color != null ? color : COLORS[(seed || 0) % COLORS.length];
+    var v = parkedVariant(seed);
+    color = color != null ? color : COLORS[v.ci];
     var bodyM = mat(color);
     var glassM = new THREE.MeshLambertMaterial({ color: 0x2b3540 });
+    var d = PARK_STYLES[v.style];
 
-    var parts = buildBody(bodyM, glassM, 2.05, -0.575);
-    g.add(parts.g);
-    buildWheels(g, 12);
-    // 灯
-    var hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.06), new THREE.MeshLambertMaterial({ color: 0xfff2c8 }));
-    hl.position.set(-0.55, 0.72, L / 2 + 0.01); g.add(hl);
-    var hr = hl.clone(); hr.position.x = 0.55; g.add(hr);
-    var tl = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.06), new THREE.MeshLambertMaterial({ color: 0xb33a2f }));
-    tl.position.set(-0.60, 0.75, -L / 2 - 0.01); g.add(tl);
-    var tr = tl.clone(); tr.position.x = 0.60; g.add(tr);
+    if (v.style === 'hatch') {
+      // 与玩家车同一套精调件（几何数值单源），保证既有关卡两厢停放车外观不变
+      var parts = buildBody(bodyM, glassM, 2.05, -0.575);
+      g.add(parts.g);
+      buildWheels(g, 12);
+      parkLamp(g, 0.34, 0.12, -0.55, 0.72, L / 2 + 0.01, 0xfff2c8);
+      parkLamp(g, 0.34, 0.12, 0.55, 0.72, L / 2 + 0.01, 0xfff2c8);
+      parkLamp(g, 0.32, 0.16, -0.60, 0.75, -L / 2 - 0.01, 0xb33a2f);
+      parkLamp(g, 0.32, 0.16, 0.60, 0.75, -L / 2 - 0.01, 0xb33a2f);
+    } else {
+      STYLE_BUILDERS[v.style](g, bodyM, glassM, d);
+      buildParkWheels(g, d, 12);
+    }
 
     var merged = mergeStatic(g);
     merged.castShadow = true;   // 车身件原集体投影，合并后整 Mesh 等效（轮/灯投影在车底阴影内不可辨）
@@ -201,5 +341,5 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
     };
   }
 
-  return { buildParkedCar: buildParkedCar, buildPlayerCar: buildPlayerCar, mergeStatic: mergeStatic, COLORS: COLORS };
+  return { buildParkedCar: buildParkedCar, buildPlayerCar: buildPlayerCar, mergeStatic: mergeStatic, COLORS: COLORS, parkedVariant: parkedVariant, PARK_STYLES: PARK_STYLES };
 });

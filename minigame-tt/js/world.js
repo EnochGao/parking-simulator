@@ -158,10 +158,12 @@ module = exports = define = undefined;        /* 强制浏览器分支（var 对
       var a = (o.a || 0) * D2R;
       if (o.t === 'car') {
         var seed = idx * 7 + 3;
-        var ci = seed % PS.CarModel.COLORS.length;   // 与 buildParkedCar 的取色同式
-        var tpl = parkedTpls[ci];
+        // 模板键 = 变体（样式+颜色；parkedVariant 与 buildParkedCar 内部同式单源派生）
+        var pv = PS.CarModel.parkedVariant(seed);
+        var tk = pv.style + '_' + pv.ci;
+        var tpl = parkedTpls[tk];
         if (!tpl) {
-          tpl = parkedTpls[ci] = PS.CarModel.buildParkedCar(null, seed);
+          tpl = parkedTpls[tk] = PS.CarModel.buildParkedCar(null, seed);
           // 模板的几何/材质登记一次（clone 共享同一实例，销毁时随 disposables 释放）
           tpl.traverse(function (n) {
             if (n.geometry) disposables.push(n.geometry);

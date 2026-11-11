@@ -3,14 +3,18 @@
 程序化生成的停放车模型，与游戏内 `js/config.js` 的 `CAR`（飞度 GR9）尺寸同源。
 每台车同时提供 **GLB 单文件**与 **glTF + .bin 分体版**（内容等价，按引擎喜好二选一）。
 
+游戏内停放车（`js/carModel.js`）按同套尺寸语言维护五种车身剪影
+（两厢/三厢/SUV/微面/小车），关卡里按 seed 自动混布；本目录是同款资产的
+放样精修版，供查看器预览与外部引擎取用。
+
 | 文件 | 内容 |
 |---|---|
 | `car_gr9.glb` / `.gltf` + `.bin` | 玩家车同款两厢（hatch）：4.109 × 1.694 × 1.537 m |
 | `car_sedan.glb` / `.gltf` + `.bin` | 紧凑型三厢（sedan）：4.62 × 1.78 × 1.455 m |
 | `car_suv.glb` / `.gltf` + `.bin` | 紧凑型 SUV：4.45 × 1.85 × 1.66 m |
+| `car_van.glb` / `.gltf` + `.bin` | 微面·平头面包车（van）：4.05 × 1.65 × 1.88 m |
+| `car_mini.glb` / `.gltf` + `.bin` | 小型两厢（mini）：3.95 × 1.62 × 1.50 m |
 | `wheel_185_60_r15.glb` / `.gltf` + `.bin` | 独立轮组（轮胎 + 轮辋 + 刹车盘，轮心为原点） |
-| `car_ferrari.glb` | **导入的外部高模**（458 Spider，358 788 面 / 12.7 MB），敞篷、含完整内饰 |
-| `car_bmw1m_rig.glb` | **导入的外部高模**（BMW 1M，104 376 面 / 6.65 MB）：四门、完整内饰、四轮独立；镜壳+镜片拆成 `Mirror_L/R`、方向盘 `SteeringWheel`，都带枢轴 |
 | `manifest.json` | 车型清单：尺寸、轴距、轮径、驾驶位眼点、材质/节点名、三角面、包围盒 |
 | `viewer.html` | 零依赖预览器（three.js + 内置迷你 glTF 载入器）：车漆/线框/转轮/打方向/车内视角 |
 
@@ -136,50 +140,8 @@ npm run import:model -- assets/models/incoming/civic.glb --name car_civic --leng
 轮子如果焊在车身上，`Wheel_*` 节点不存在，游戏里就转不了——这种情况在 Blender 里按轮心
 分离成四个对象再导出即可。
 
-### 现在已经导入的示例
-
-`car_ferrari.glb`：取 three.js 官方示例里的 458 Spider（`examples/models/gltf/ferrari.glb`），
-处理链路如下，可作为你自己接车模的参照：
-
-```bash
-# 1) 源文件是 Draco 压缩，先解压（npx 临时工具，不写进项目依赖）
-npx @gltf-transform/cli copy assets/models/incoming/ferrari.glb assets/models/incoming/ferrari_plain.glb
-# 2) 归位：车头原本朝 -Z → --yaw 180；缩放到游戏车长 4.109m；材质改名；只出 GLB
-npm run import:model -- assets/models/incoming/ferrari_plain.glb --name car_ferrari --glb-only \
-  --yaw 180 --length 4.109 --manifest \
-  --rename Body_Color=Paint --rename Glass_Gray=Glass --rename Tires=Tire \
-  --rename Interior_dark=Cabin --rename metal_chrome=Chrome --rename Leather_red=Seat
-```
-
-结果：4.11 × 2.05 × 1.12 m、358 788 面、12.7 MB；4 个车轮节点（`wheel_fl/fr/rl/rr`）可滚动，
-`steering_wheel` 节点存在，查看器据此推算坐姿眼点，车内视角可用。
-
-`car_bmw1m_rig.glb`：用户提供的 Sketchfab 模型（FBX 转 GLB）。源模型按 5.10 m 长导出（单位偏大），
-按 1M 真实车长归位；镜壳/方向盘由 `rig_model.js` 拆件加枢轴。完整链路：
-
-```bash
-# 1) 先拆件加枢轴（源文件坐标，未缩放）
-node tools/rig_model.js assets/models/incoming/ac_-_bmw_1m_free.glb \
-  --spec rig_bmw.json --out assets/models/incoming/bmw_rigged.glb
-# 2) 再归位 + 材质对齐 + 写清单
-npm run import:model -- assets/models/incoming/bmw_rigged.glb --name car_bmw1m_rig \
-  --glb-only --length 4.36 --manifest \
-  --rename LIVREA=Paint --rename VETRI_Nero=Glass --rename VETRI_Fanali=Glass \
-  --rename RT_Battistrada=Tire --rename RT_rim=Rim --rename LOGHI_RIM=Rim \
-  --rename INT_Skin=Seat --rename INT_Velluto=Seat --rename INT_Plaastica_NERA=Cabin \
-  --rename INT_Display=Screen --rename MIRROR=MirrorGlass \
-  --rename FANALI_Anteriori=HeadLamp --rename Fanali_POSTERIORI_TS=TailLamp
-# 完整命令见 git 历史；材质共 40 个，基本都映射到 Paint/Glass/Cabin/Seat/Rim/Tire/Chrome/Trim
-```
-
-接入结果：4.36 × 1.97 × 1.42 m（宽含后视镜）、100 582 面、6.75 MB；四个轮组
-`WHEEL_RR / WHEEL_RF / WHEEL_LR / WHEEL_LF` 是独立节点（注意它用 RF/LF 的写法，
-查看器两种顺序都认），查看器自动补了前轮转向枢轴；内饰、座椅、iDrive 屏、安全带齐全；
-后视镜玻璃是独立网格，但镜壳与车门同属一个网格，**不能单独转动**（游戏用自带镜面相机，不影响）。
-
-> **注意**：这两个都是第三方模型，仅适合本地/学习验收；对外发行请换成有明确授权、
-> 且不含车厂商标的模型。另外 10–35 万面对手机与微信小游戏过重——真正进游戏前需要
-> 减面（`gltf-transform simplify` 对这种多材质硬表面模型效果有限）或走 Draco + 解码器。
+> **授权提醒**：对外发行（含微信/抖音小游戏上架）请只用有明确授权、不含车厂商标的模型。
+> 面数守则见上表：停放车 ≤ 30k、玩家车 ≤ 60k，超了先用 `gltf-transform simplify` 减面。
 
 ## 拆件 / 加枢轴（`tools/rig_model.js`）
 
@@ -208,10 +170,6 @@ node tools/rig_model.js in.glb --spec rig.json --out out.glb
 - **拆不了的**：真正焊死（共享顶点、连续曲面）的几何——那只能在 Blender 里做拓扑切割；
   只存在于贴图里的细节（比如码表指针）——几何上没有，只能换贴图或游戏叠加 HUD。
 - 拆完节点会自动加 `extras: { kind: "pivot", axis }`，并保留原网格的其余部分。
-
-`car_bmw1m_rig.glb` 就是用它做的：从车门网格里拆出 298 面的镜壳，和 32 面的镜片一起挂到
-`Mirror_L / Mirror_R`（枢轴在镜脚），方向盘 `SteeringWheel` 补枢轴；查看器里已实测：
-掰后视镜、转方向盘都是整体转动。
 
 ## 接入示例（three.js）
 
